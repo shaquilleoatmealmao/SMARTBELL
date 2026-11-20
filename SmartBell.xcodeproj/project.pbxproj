@@ -7,49 +7,49 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		5E108BB4D80F1F4EFB67D802 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D894FCA6EE41DF5898E8D165 /* AppModel.swift */; };
-		6E0BC940E42146DB7B3D6F0F /* SmartBellApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC73ECAE32733CF380270473 /* SmartBellApp.swift */; };
-		DCB4D691545CE13CA565396B /* Coach.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3881A3DDF33813397B3C0F0 /* Coach.swift */; };
-		8536F41ABD4268DC15A7D270 /* Calibrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E663C070E612770BECC9F79F /* Calibrator.swift */; };
-		E431588B6132185EBC9405DC /* GravityTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564C20AE34AA8D17782C03CC /* GravityTracker.swift */; };
-		D74CED793E882CC22E8A68ED /* MotionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C807BAC5A42FB3BB4FAAF3 /* MotionEngine.swift */; };
-		CB6CEF8308C7D9E728F54226 /* MotionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC73D61FA905C982FA64292 /* MotionModels.swift */; };
+		0E49E42CA3B81DDCDA9D7E1A /* Recorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA9A8024368DBF8C6D48085 /* Recorder.swift */; };
+		12F1BB5BE420E2B806E27B9C /* SetSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB19A8329DBBFE08F14CFB81 /* SetSummaryView.swift */; };
+		2071A492923571CE90465FEB /* DeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D322EC493D1E977789D81CE0 /* DeviceView.swift */; };
 		22CB53D4BA17C5871BDD07DF /* RepDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C277E8A8C982D172143E9A1 /* RepDetector.swift */; };
 		4E134C2797E010271C017300 /* Vec3.swift in Sources */ = {isa = PBXBuildFile; fileRef = C480D2B2DD2C724AEBA17EA9 /* Vec3.swift */; };
-		B48A5637086BA938EB8D7F99 /* BLEManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD4065CA2F3FBB3576E1DCAC /* BLEManager.swift */; };
+		5E108BB4D80F1F4EFB67D802 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D894FCA6EE41DF5898E8D165 /* AppModel.swift */; };
+		6E0BC940E42146DB7B3D6F0F /* SmartBellApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC73ECAE32733CF380270473 /* SmartBellApp.swift */; };
 		6F091A3CCE8465BBD339F914 /* DemoSensor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76D060824D1FA9715CBE1D95 /* DemoSensor.swift */; };
-		0E49E42CA3B81DDCDA9D7E1A /* Recorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA9A8024368DBF8C6D48085 /* Recorder.swift */; };
-		FECC15F22C78BC20EB41065F /* WorkoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 339FEF523F0C2979E9495F15 /* WorkoutStore.swift */; };
-		D4FFC24EA4F13C26C8763257 /* ArmModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E70A1272826C98DB0692548 /* ArmModelView.swift */; };
-		B2A9E1F3E1237EC6BBE1DEFA /* CalibrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22D3C87F45451BE7272A2E4B /* CalibrationView.swift */; };
-		2071A492923571CE90465FEB /* DeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D322EC493D1E977789D81CE0 /* DeviceView.swift */; };
-		E6C5EFFC29EE6DA6EA1C3550 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8538C1AA6CED85610608A4 /* HistoryView.swift */; };
-		12F1BB5BE420E2B806E27B9C /* SetSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB19A8329DBBFE08F14CFB81 /* SetSummaryView.swift */; };
+		8536F41ABD4268DC15A7D270 /* Calibrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E663C070E612770BECC9F79F /* Calibrator.swift */; };
 		9C480466742EB2EC81AF58EE /* WorkoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DB39690E958168B30D459E5 /* WorkoutView.swift */; };
+		B2A9E1F3E1237EC6BBE1DEFA /* CalibrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22D3C87F45451BE7272A2E4B /* CalibrationView.swift */; };
+		B48A5637086BA938EB8D7F99 /* BLEManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD4065CA2F3FBB3576E1DCAC /* BLEManager.swift */; };
+		CB6CEF8308C7D9E728F54226 /* MotionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC73D61FA905C982FA64292 /* MotionModels.swift */; };
+		D4FFC24EA4F13C26C8763257 /* ArmModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E70A1272826C98DB0692548 /* ArmModelView.swift */; };
+		D74CED793E882CC22E8A68ED /* MotionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C807BAC5A42FB3BB4FAAF3 /* MotionEngine.swift */; };
+		DCB4D691545CE13CA565396B /* Coach.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3881A3DDF33813397B3C0F0 /* Coach.swift */; };
+		E431588B6132185EBC9405DC /* GravityTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564C20AE34AA8D17782C03CC /* GravityTracker.swift */; };
+		E6C5EFFC29EE6DA6EA1C3550 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8538C1AA6CED85610608A4 /* HistoryView.swift */; };
+		FECC15F22C78BC20EB41065F /* WorkoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 339FEF523F0C2979E9495F15 /* WorkoutStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		D894FCA6EE41DF5898E8D165 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
-		DC73ECAE32733CF380270473 /* SmartBellApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartBellApp.swift; sourceTree = "<group>"; };
-		A3881A3DDF33813397B3C0F0 /* Coach.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Coach.swift; sourceTree = "<group>"; };
-		E663C070E612770BECC9F79F /* Calibrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Calibrator.swift; sourceTree = "<group>"; };
+		22D3C87F45451BE7272A2E4B /* CalibrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationView.swift; sourceTree = "<group>"; };
+		2B8538C1AA6CED85610608A4 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		339FEF523F0C2979E9495F15 /* WorkoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutStore.swift; sourceTree = "<group>"; };
+		4DB39690E958168B30D459E5 /* WorkoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutView.swift; sourceTree = "<group>"; };
 		564C20AE34AA8D17782C03CC /* GravityTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GravityTracker.swift; sourceTree = "<group>"; };
-		B2C807BAC5A42FB3BB4FAAF3 /* MotionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionEngine.swift; sourceTree = "<group>"; };
-		ACC73D61FA905C982FA64292 /* MotionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionModels.swift; sourceTree = "<group>"; };
+		6A338B1321DDE7BDF8D6BE74 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		6C277E8A8C982D172143E9A1 /* RepDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepDetector.swift; sourceTree = "<group>"; };
+		76D060824D1FA9715CBE1D95 /* DemoSensor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoSensor.swift; sourceTree = "<group>"; };
+		8E70A1272826C98DB0692548 /* ArmModelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArmModelView.swift; sourceTree = "<group>"; };
+		9E4BF53749BB48426FF821DE /* SmartBell.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SmartBell.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A3881A3DDF33813397B3C0F0 /* Coach.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Coach.swift; sourceTree = "<group>"; };
+		ABA9A8024368DBF8C6D48085 /* Recorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recorder.swift; sourceTree = "<group>"; };
+		ACC73D61FA905C982FA64292 /* MotionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionModels.swift; sourceTree = "<group>"; };
+		B2C807BAC5A42FB3BB4FAAF3 /* MotionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionEngine.swift; sourceTree = "<group>"; };
 		C480D2B2DD2C724AEBA17EA9 /* Vec3.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vec3.swift; sourceTree = "<group>"; };
 		CD4065CA2F3FBB3576E1DCAC /* BLEManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEManager.swift; sourceTree = "<group>"; };
-		76D060824D1FA9715CBE1D95 /* DemoSensor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoSensor.swift; sourceTree = "<group>"; };
-		ABA9A8024368DBF8C6D48085 /* Recorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recorder.swift; sourceTree = "<group>"; };
-		339FEF523F0C2979E9495F15 /* WorkoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutStore.swift; sourceTree = "<group>"; };
-		8E70A1272826C98DB0692548 /* ArmModelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArmModelView.swift; sourceTree = "<group>"; };
-		22D3C87F45451BE7272A2E4B /* CalibrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationView.swift; sourceTree = "<group>"; };
 		D322EC493D1E977789D81CE0 /* DeviceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceView.swift; sourceTree = "<group>"; };
-		2B8538C1AA6CED85610608A4 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		D894FCA6EE41DF5898E8D165 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		DC73ECAE32733CF380270473 /* SmartBellApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartBellApp.swift; sourceTree = "<group>"; };
+		E663C070E612770BECC9F79F /* Calibrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Calibrator.swift; sourceTree = "<group>"; };
 		EB19A8329DBBFE08F14CFB81 /* SetSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetSummaryView.swift; sourceTree = "<group>"; };
-		4DB39690E958168B30D459E5 /* WorkoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutView.swift; sourceTree = "<group>"; };
-		6A338B1321DDE7BDF8D6BE74 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		9E4BF53749BB48426FF821DE /* SmartBell.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SmartBell.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,22 +63,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		D136F01BE392B26593B5A23F = {
-			isa = PBXGroup;
-			children = (
-				1C9A9E0E24D2606512EDB8EB /* SmartBell */,
-				EE37EF47D9F0B261DB9BE384 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
-		EE37EF47D9F0B261DB9BE384 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				9E4BF53749BB48426FF821DE /* SmartBell.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
 		1C9A9E0E24D2606512EDB8EB /* SmartBell */ = {
 			isa = PBXGroup;
 			children = (
@@ -93,6 +77,16 @@
 			path = SmartBell;
 			sourceTree = "<group>";
 		};
+		22E0F70174F03FEE945ABBF9 /* Sensor */ = {
+			isa = PBXGroup;
+			children = (
+				CD4065CA2F3FBB3576E1DCAC /* BLEManager.swift */,
+				76D060824D1FA9715CBE1D95 /* DemoSensor.swift */,
+				ABA9A8024368DBF8C6D48085 /* Recorder.swift */,
+			);
+			path = Sensor;
+			sourceTree = "<group>";
+		};
 		267AEBE1BACFD8AB573455B5 /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -102,12 +96,41 @@
 			path = App;
 			sourceTree = "<group>";
 		};
+		785A62F6730D915597ED2079 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				8E70A1272826C98DB0692548 /* ArmModelView.swift */,
+				22D3C87F45451BE7272A2E4B /* CalibrationView.swift */,
+				D322EC493D1E977789D81CE0 /* DeviceView.swift */,
+				2B8538C1AA6CED85610608A4 /* HistoryView.swift */,
+				EB19A8329DBBFE08F14CFB81 /* SetSummaryView.swift */,
+				4DB39690E958168B30D459E5 /* WorkoutView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
 		A38A6B1270F2579AB5702A7F /* Feedback */ = {
 			isa = PBXGroup;
 			children = (
 				A3881A3DDF33813397B3C0F0 /* Coach.swift */,
 			);
 			path = Feedback;
+			sourceTree = "<group>";
+		};
+		D136F01BE392B26593B5A23F = {
+			isa = PBXGroup;
+			children = (
+				1C9A9E0E24D2606512EDB8EB /* SmartBell */,
+				EE37EF47D9F0B261DB9BE384 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D946D127F471524DF6B36420 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				339FEF523F0C2979E9495F15 /* WorkoutStore.swift */,
+			);
+			path = Storage;
 			sourceTree = "<group>";
 		};
 		DB582440FFC9DE851F671834 /* Motion */ = {
@@ -123,35 +146,12 @@
 			path = Motion;
 			sourceTree = "<group>";
 		};
-		22E0F70174F03FEE945ABBF9 /* Sensor */ = {
+		EE37EF47D9F0B261DB9BE384 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				CD4065CA2F3FBB3576E1DCAC /* BLEManager.swift */,
-				76D060824D1FA9715CBE1D95 /* DemoSensor.swift */,
-				ABA9A8024368DBF8C6D48085 /* Recorder.swift */,
+				9E4BF53749BB48426FF821DE /* SmartBell.app */,
 			);
-			path = Sensor;
-			sourceTree = "<group>";
-		};
-		D946D127F471524DF6B36420 /* Storage */ = {
-			isa = PBXGroup;
-			children = (
-				339FEF523F0C2979E9495F15 /* WorkoutStore.swift */,
-			);
-			path = Storage;
-			sourceTree = "<group>";
-		};
-		785A62F6730D915597ED2079 /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				8E70A1272826C98DB0692548 /* ArmModelView.swift */,
-				22D3C87F45451BE7272A2E4B /* CalibrationView.swift */,
-				D322EC493D1E977789D81CE0 /* DeviceView.swift */,
-				2B8538C1AA6CED85610608A4 /* HistoryView.swift */,
-				EB19A8329DBBFE08F14CFB81 /* SetSummaryView.swift */,
-				4DB39690E958168B30D459E5 /* WorkoutView.swift */,
-			);
-			path = Views;
+			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -182,7 +182,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1600;
-				LastUpgradeCheck = 1600;
+				LastUpgradeCheck = 2720;
 			};
 			buildConfigurationList = 408B650D4DD980E9208194D8 /* Build configuration list for PBXProject "SmartBell" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -242,51 +242,110 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		66A7A3138494B90AD42ACB2E /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ENABLE_MODULES = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				SDKROOT = iphoneos;
-				SWIFT_VERSION = 5.0;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_TESTABILITY = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				ONLY_ACTIVE_ARCH = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-			};
-			name = Debug;
-		};
 		1F756C0B7A21885E68B3836E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = USY395S973;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				SDKROOT = iphoneos;
-				SWIFT_VERSION = 5.0;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
+		66A7A3138494B90AD42ACB2E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = USY395S973;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
 		6F72747DB78507F791239E19 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				MARKETING_VERSION = 2.0;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SmartBell/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ca.uwaterloo.ece198.smartbell;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -297,14 +356,17 @@
 		D382E32333E9E6BBC986F7AC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				MARKETING_VERSION = 2.0;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SmartBell/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ca.uwaterloo.ece198.smartbell;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
