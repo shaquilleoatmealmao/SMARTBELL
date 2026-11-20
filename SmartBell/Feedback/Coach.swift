@@ -9,6 +9,7 @@ final class Coach {
     nonisolated static let speakCountKey = "speakCount"
     nonisolated static let speakCuesKey = "speakCues"
     nonisolated static let hapticsKey = "haptics"
+    nonisolated static let speakGuidanceKey = "speakGuidance"
 
     private let synth = AVSpeechSynthesizer()
     private let impact = UIImpactFeedbackGenerator(style: .medium)
@@ -18,6 +19,7 @@ final class Coach {
 
     private var speakCount: Bool { UserDefaults.standard.object(forKey: Self.speakCountKey) as? Bool ?? true }
     private var speakCues: Bool { UserDefaults.standard.object(forKey: Self.speakCuesKey) as? Bool ?? true }
+    private var speakGuidance: Bool { UserDefaults.standard.object(forKey: Self.speakGuidanceKey) as? Bool ?? true }
     private var haptics: Bool { UserDefaults.standard.object(forKey: Self.hapticsKey) as? Bool ?? true }
 
     func beginSet() {
@@ -51,6 +53,16 @@ final class Coach {
         lastCue = top
         lastCueTime = Date()
         say(top.cue)
+    }
+
+    /// Workout guidance (set announcements, rest timer). Can be muted separately from rep counts.
+    func guide(_ text: String) {
+        if speakGuidance { say(text) }
+    }
+
+    /// Rest is over: strong buzz + "Go".
+    func restOver() {
+        if haptics { notify.notificationOccurred(.success) }
     }
 
     func say(_ text: String) {

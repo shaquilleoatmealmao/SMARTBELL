@@ -25,17 +25,6 @@ enum CalibrationStep: Equatable {
     case failed(String)
 }
 
-struct ActiveSet {
-    var exercise: Exercise
-    var weight: Double
-    var unit: WeightUnit
-    var targetReps: Int
-    var start = Date()
-    var reps: [RepResult] = []
-    var count = 0
-    var isDemo: Bool
-}
-
 struct ReplayReport: Identifiable {
     let id = UUID()
     var fileName: String
@@ -55,14 +44,15 @@ final class AppModel: ObservableObject {
     let recorder = Recorder()
     let store = WorkoutStore()
     let coach = Coach()
+    let camera = PoseCamera()
+    let lab = CameraLab()
 
     @Published private(set) var source = Source.none
     @Published private(set) var calibration: Calibration?
     @Published private(set) var live = LiveState()
     @Published private(set) var calibrationStep: CalibrationStep?
-    @Published private(set) var activeSet: ActiveSet?
     @Published private(set) var lastRep: RepResult?
-    @Published private(set) var lastFinishedSet: WorkoutSet?
+    @Published private(set) var workout: WorkoutController?
 
     private var engine: MotionEngine?
     private var calibrator: Calibrator?
@@ -84,6 +74,7 @@ final class AppModel: ObservableObject {
         }
         ble.onSample = { [weak self] s in self?.handle(s, from: .sensor) }
         demo.onSample = { [weak self] s in self?.handle(s, from: .demo) }
+        camera.onFrame = { [weak self] f in MainActor.assumeIsolated { self?.handlePose(f) } }
         // Re-publish child objects so views observing AppModel update.
         ble.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         recorder.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
@@ -125,21 +116,24 @@ final class AppModel: ObservableObject {
         }
         guard engine != nil else { return }
         let events = engine!.push(s)  // mutate in place
-        guard activeSet != nil else {
-            for e in events { if case .result(let r) = e { lastRep = r } }
-            return
-        }
         for e in events {
             switch e {
             case .counted:
-                activeSet!.count += 1
-                coach.repCounted(activeSet!.count)
+                workout?.sensorCounted()
             case .result(let r):
-                activeSet!.reps.append(r)
                 lastRep = r
-                coach.repAnalysed(r)
+                workout?.sensorResult(r)
             }
         }
+    }
+
+    /// Every camera frame (main thread).
+    private func handlePose(_ f: PoseFrame?) {
+        if lab.isActive {
+            let sensorAngle: Double? = (calibration != nil && hasData && calibrator == nil) ? engine?.beta : nil
+            lab.process(f, sensor: sensorAngle, coach: coach)
+        }
+        workout?.cameraFrame(f)
     }
 
     private func snapshot() {
@@ -248,36 +242,43 @@ final class AppModel: ObservableObject {
         calibrationStep = nil
     }
 
-    // MARK: - sets
+    // MARK: - workouts
 
-    func startSet(exercise: Exercise, weight: Double, unit: WeightUnit, targetReps: Int) {
-        guard let cal = calibration else { return }
-        engine = MotionEngine(calibration: cal) // fresh detector, nothing carried over
-        activeSet = ActiveSet(exercise: exercise, weight: weight, unit: unit, targetReps: targetReps, isDemo: isDemo)
+    /// SmartBell can count right now: calibrated and streaming.
+    var sensorReady: Bool { calibration != nil && hasData }
+
+    func startWorkout(_ template: WorkoutTemplate, unit: WeightUnit) {
+        guard !template.items.isEmpty else { return }
+        let w = WorkoutController(template: template, unit: unit, isDemo: isDemo, coach: coach, store: store,
+                                  sensorReady: { [weak self] in self?.sensorReady ?? false })
+        w.onFinished = { [weak self, weak w] in
+            guard let self, let w else { return }
+            if !w.session.allSets.isEmpty { self.store.add(w.session) }
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        workout = w
         lastRep = nil
-        coach.beginSet()
+        w.begin()
         UIApplication.shared.isIdleTimerDisabled = true // keep running with the phone in a pocket
     }
 
-    func endSet() {
-        guard let s = activeSet else { return }
-        activeSet = nil
-        coach.endSet()
-        UIApplication.shared.isIdleTimerDisabled = false
-        let set = WorkoutSet(date: s.start, exercise: s.exercise, weight: s.weight, unit: s.unit,
-                             targetReps: s.targetReps, reps: s.reps,
-                             duration: Date().timeIntervalSince(s.start), isDemo: s.isDemo)
-        if !set.reps.isEmpty { store.add(set) }
-        lastFinishedSet = set
+    /// Quick start: one exercise, three sets.
+    func quickStart(_ exercise: Exercise, unit: WeightUnit) {
+        let w = store.suggestedWeight(exercise.id, unit: unit) ?? (exercise.usesWeight ? (unit == .lb ? 15 : 7) : 0)
+        let t = WorkoutTemplate(name: exercise.name, items: [
+            PlannedExercise(exerciseId: exercise.id, sets: 3, reps: 10, weight: w, restSeconds: 90)])
+        startWorkout(t, unit: unit)
     }
 
-    func discardSet() {
-        activeSet = nil
-        coach.endSet()
+    /// Discard without saving.
+    func cancelWorkout() {
+        workout?.cancel()
+        workout = nil
         UIApplication.shared.isIdleTimerDisabled = false
     }
 
-    func clearFinishedSet() { lastFinishedSet = nil }
+    /// Close the summary after a finished workout.
+    func closeWorkout() { workout = nil }
 
     // MARK: - recording / replay
 

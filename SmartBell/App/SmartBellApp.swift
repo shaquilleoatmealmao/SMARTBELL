@@ -18,15 +18,28 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            WorkoutView()
-                .tabItem { Label("Workout", systemImage: "dumbbell") }
+            TrainView()
+                .tabItem { Label("Train", systemImage: "dumbbell") }
                 .tag(0)
-            HistoryView()
-                .tabItem { Label("History", systemImage: "chart.bar.xaxis") }
+            CameraView(camera: model.camera, lab: model.lab)
+                .tabItem { Label("Camera", systemImage: "figure.strengthtraining.traditional") }
                 .tag(1)
+            ProgressTabView()
+                .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(2)
+            HistoryView()
+                .tabItem { Label("History", systemImage: "list.bullet.rectangle") }
+                .tag(3)
             DeviceView()
                 .tabItem { Label("Device", systemImage: "sensor") }
-                .tag(2)
+                .tag(4)
+        }
+        .fullScreenCover(isPresented: Binding(get: { model.workout != nil },
+                                              set: { if !$0 { model.closeWorkout() } })) {
+            if let w = model.workout {
+                WorkoutPlayerView(workout: w, camera: model.camera)
+                    .environmentObject(model)
+            }
         }
         .sheet(isPresented: Binding(get: { model.calibrationStep != nil },
                                     set: { if !$0 { model.dismissCalibration() } })) {
