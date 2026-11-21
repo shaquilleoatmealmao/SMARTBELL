@@ -76,7 +76,7 @@ struct SetRow: View {
                     Image(systemName: set.source.symbol)
                     if let r = set.restBefore { Text("rest \(durationText(r))") }
                     if let rpe = set.rpe { Text("RPE \(Int(rpe))") }
-                    if let v = set.meanSpeed { Text("\(Int(v))°/s") }
+                    if let v = set.meanSpeed { Text("\(Int(v))\(set.speedUnit)") }
                     if let vl = set.velocityLoss { Text("−\(Int(vl * 100))%") }
                     if set.partials > 0 { Text("\(set.partials) partial") }
                 }

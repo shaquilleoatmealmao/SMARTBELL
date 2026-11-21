@@ -128,7 +128,7 @@ struct RepCard: View {
             ScoreRing(score: rep.score)
             VStack(alignment: .leading, spacing: 4) {
                 if let issue = rep.issues.first {
-                    Text(issue.cue).font(.headline)
+                    Text(issue.cueText(generic: rep.isGeneric)).font(.headline)
                     if rep.issues.count > 1 {
                         Text(rep.issues.dropFirst().map(\.label).joined(separator: " · "))
                             .font(.caption).foregroundStyle(.secondary)
@@ -139,7 +139,7 @@ struct RepCard: View {
                 HStack(spacing: 12) {
                     metric("Lift", String(format: "%.1fs", rep.concentricSeconds))
                     metric("Lower", String(format: "%.1fs", rep.eccentricSeconds))
-                    metric("Range", "\(Int(rep.topDeg - rep.bottomDeg))°")
+                    metric("Range", rep.isGeneric ? "\(Int(rep.topDeg.rounded()))%" : "\(Int(rep.topDeg - rep.bottomDeg))°")
                 }
             }
             Spacer(minLength: 0)

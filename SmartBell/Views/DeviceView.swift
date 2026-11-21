@@ -51,6 +51,8 @@ struct DeviceView: View {
                     Text("Recalibrate whenever the strap is moved or re-tightened.")
                 }
 
+                TaughtExercisesSection()
+
                 Section {
                     Button {
                         model.toggleRecording()

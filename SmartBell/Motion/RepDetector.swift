@@ -79,7 +79,9 @@ struct RepDetector {
             }
 
         case .settle:
-            if f.beta < valley { valley = f.beta; valleyT = f.t }
+            // A new low only counts if it's clearly lower: a slow creep toward the bottom
+            // mustn't keep the rep open forever.
+            if f.beta < valley - 0.5 { valley = f.beta; valleyT = f.t }
             if f.beta > valley + 4.0 || f.t - valleyT > 0.35 {
                 if counted || peak >= cal.startDeg + 8.0 { events.append(.result(analyse())) }
                 toIdle(f)
@@ -142,14 +144,23 @@ struct RepDetector {
         }
 
         var issues: [FormIssue] = []
-        if swing > 4.0 { issues.append(.swing) }
-        if peak > cal.topDeg + 18.0 { issues.append(.elbow) }
-        if !counted { issues.append(.partial) } else if peak < cal.topDeg - 20.0 { issues.append(.shortTop) }
-        if bottom > cal.bottomDeg + 20.0 { issues.append(.shortBottom) }
-        if eccentric < 0.7 { issues.append(.fastDown) }
-        if concentric < 0.35 { issues.append(.fastUp) }
-        if twist > max(30.0, 2.0 * cal.twistRef + 10.0) { issues.append(.twist) }
-        if sway > max(15.0, 2.0 * cal.swayRef + 8.0) { issues.append(.sway) }
+        if cal.isGeneric {
+            // Taught exercise: the signal is "% of your learned range", so judge range, tempo, twist.
+            if !counted { issues.append(.partial) } else if peak < cal.topDeg - 20.0 { issues.append(.shortTop) }
+            if bottom > cal.bottomDeg + 20.0 { issues.append(.shortBottom) }
+            if eccentric < 0.5 { issues.append(.fastDown) }
+            if concentric < 0.3 { issues.append(.fastUp) }
+            if twist > max(30.0, 2.0 * cal.twistRef + 15.0) { issues.append(.twist) }
+        } else {
+            if swing > 4.0 { issues.append(.swing) }
+            if peak > cal.topDeg + 18.0 { issues.append(.elbow) }
+            if !counted { issues.append(.partial) } else if peak < cal.topDeg - 20.0 { issues.append(.shortTop) }
+            if bottom > cal.bottomDeg + 20.0 { issues.append(.shortBottom) }
+            if eccentric < 0.7 { issues.append(.fastDown) }
+            if concentric < 0.35 { issues.append(.fastUp) }
+            if twist > max(30.0, 2.0 * cal.twistRef + 10.0) { issues.append(.twist) }
+            if sway > max(15.0, 2.0 * cal.swayRef + 8.0) { issues.append(.sway) }
+        }
         issues.sort { $0.priority < $1.priority }
         let score = max(0, 100 - issues.reduce(0) { $0 + $1.penalty })
 
@@ -157,7 +168,8 @@ struct RepDetector {
                          endT: seg[seg.count - 1].t, bottomDeg: bottom, topDeg: peak,
                          concentricSeconds: concentric, eccentricSeconds: eccentric,
                          peakSpeedDps: peakSpeed, twistRange: twist, swayRange: sway, swing: swing,
-                         pathRmsDeg: pathRms, score: score, issues: issues, curve: curve)
+                         pathRmsDeg: pathRms, score: score, issues: issues, curve: curve,
+                         generic: cal.isGeneric ? true : nil)
     }
 }
 

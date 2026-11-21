@@ -38,6 +38,9 @@ struct SensorSample: Equatable {
 struct MotionEngine {
     let params: MotionParams
     let calibration: Calibration
+    /// Set for a taught exercise: `beta` is then "% of the learned range" instead of the forearm angle.
+    let profile: MotionProfile?
+    private var signal: ProfileSignal?
     private(set) var tracker: GravityTracker
     private(set) var detector: RepDetector
     private(set) var t = 0.0
@@ -48,11 +51,13 @@ struct MotionEngine {
     private var reference: Vec3? = nil
     private var heading = 0.0
 
-    init(calibration: Calibration, params: MotionParams = MotionParams()) {
+    init(calibration: Calibration, params: MotionParams = MotionParams(), profile: MotionProfile? = nil) {
         self.params = params
         self.calibration = calibration
+        self.profile = profile
+        signal = profile.map { ProfileSignal(profile: $0) }
         tracker = GravityTracker(params: params, calibration: calibration)
-        detector = RepDetector(calibration: calibration)
+        detector = RepDetector(calibration: profile?.detectorCalibration(base: calibration) ?? calibration)
     }
 
     var isInRep: Bool { detector.state != .idle }
@@ -66,7 +71,11 @@ struct MotionEngine {
         tracker.update(accel: s.accel, gyroDps: s.gyro, dt: s.dt)
         guard let u = tracker.up else { return [] }
         let cal = calibration
-        beta = forearmAngleDegrees(up: u, forearm: cal.forearm)
+        if signal != nil {
+            beta = signal!.update(tracker, dt: s.dt)   // % of the learned range
+        } else {
+            beta = forearmAngleDegrees(up: u, forearm: cal.forearm)
+        }
         let w = tracker.rate * degPerRad
         let d = min(max(s.dt, 0.001), 0.05)
 

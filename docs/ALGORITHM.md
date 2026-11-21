@@ -99,3 +99,48 @@ The *lift*/*lower* times are measured between 5° bands at the bottom and top. T
 In the baseline runs every kind of bad rep got the right cue in every seed, and good reps got no false cues (also true in all the stress conditions). See `simulated-angle.png`: the blue estimate tracks the truth within a few degrees for the whole session, while plain gyro integration (red) drifts away.
 
 **This is simulation, not measured data.** Real arms add skin/strap movement, the ESP32's real noise and timing, and people who don't move like a script. Before claiming accuracy, record real sets (Device › Record), label them by hand, and run `tools/replay_csv.py` on them. All thresholds are in one place (`MotionModels.swift` / `smartbell_motion.py`) for tuning.
+
+## 6. Teaching SmartBell any exercise (`ExerciseProfile.swift`)
+
+Curls are built in. For every other exercise, you teach SmartBell once: hold the start position still for 1.5 s, do 3 reps, then hold still. The app records that and learns a **profile** of the movement. From then on it turns the live sensor data into one number, **progress = % of your learned range** (0 = start position, 100 = end of the rep). That number feeds the same rep detector as curls (start 30%, count 70%, return 22%).
+
+A forearm sensor can see a rep in two ways, and teaching tries both:
+
+**Orientation (preferred).** Used when the forearm tilts during the rep: lateral and front raises, push-ups, triceps extensions, crunches. While teaching, the app records the gravity direction in the start position (`u_start`) and the direction at the far end of the rep (`u_end`, averaged over the 3 rep peaks). Live, the current gravity direction is projected onto the arc between them:
+
+```
+axis = normalize(u_start × u_end),  range = angle(u_start, u_end)
+progress = 100 · atan2(axis · (u_start × u_p), u_start · u_p) / range     (u_p = u with its axis part removed)
+```
+
+This uses the same gravity tracker as curls, so it can't drift.
+
+**Vertical movement.** Used when the forearm mostly moves up and down without tilting: squats, presses, rows, deadlifts. The vertical acceleration comes from `|a| − g_ref`. Because `|g + a_lin| = g + (vertical part of a_lin)` to first order however the sensor is tilted, this needs no orientation estimate, so gyro drift can't leak in. It is integrated twice for height, with three safeguards against drift:
+- **Still:** velocity is zeroed whenever the arm is still (a zero-velocity update), and `g_ref` is re-learned then.
+- **Bleed:** velocity bleeds slowly toward zero (15 s time constant).
+- **Re-anchor:** height is reset to zero at the start of every rep. That's the moment velocity clearly heads outward again (past 25% of the learned peak speed), which means you've just left the start position. This is the "reset the position after each rep" idea: errors only live for one rep.
+
+The tracker's stillness check also compares the acceleration filtered at 8 Hz with a 1 Hz copy. Without that, a smooth squat (no rotation) would look "still" and corrupt the bias and g estimates. Counting at a constant speed can't use "zero acceleration means stopped" either, because mid-rep the acceleration is also zero.
+
+**Choosing.** Each candidate profile is checked by replaying the teaching recording through the real engine. The one that finds the most reps with the most consistent peaks wins, and orientation gets a bonus because it can't drift. The learned profile also stores a 40-point template of your rep and your normal wrist twist.
+
+**Form for taught exercises** is judged on what the progress signal supports:
+- partial rep, not far enough, or not back to the start
+- going out or coming back too fast
+- wrist twist
+
+The curl-specific checks (swing, elbow, sideways path) apply to curls only.
+
+### Validation (simulation)
+
+`tools/simulate_exercises.py` simulates five exercises with the forearm sensor: squat, shoulder press, lateral raise, bent-over row, push-up. It includes a random mounting rotation, gyro bias, noise, a 3% accelerometer scale error and dropped packets. Each run teaches 3 reps, rests 8 s, then does a set of 8: one partial, one fast, the rest normal. Over 20 random seeds:
+
+| exercise | channel learned | sets with all 7 full reps counted exactly |
+|---|---|---|
+| lateral raise | orientation | 20/20 |
+| push-up | orientation | 20/20 |
+| shoulder press | vertical | 20/20 |
+| squat | vertical | 15/20 |
+| bent-over row | vertical | 14/20 |
+
+Orientation exercises are as reliable as curls. Vertical ones usually count correctly. Their errors were mostly the deliberate half-depth partial being counted as a full rep (or an extra partial appearing) right after the fast rep. In other words, depth and range judgements are approximate on that channel, which the app says when you teach one. Again, this is simulation: check real sets with recordings before quoting numbers.

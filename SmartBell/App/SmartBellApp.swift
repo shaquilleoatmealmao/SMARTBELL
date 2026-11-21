@@ -41,9 +41,16 @@ struct RootView: View {
                     .environmentObject(model)
             }
         }
-        .sheet(isPresented: Binding(get: { model.calibrationStep != nil },
+        // (during a workout these two sheets are shown by the workout screen instead)
+        .sheet(isPresented: Binding(get: { model.calibrationStep != nil && model.workout == nil },
                                     set: { if !$0 { model.dismissCalibration() } })) {
             CalibrationView()
+                .environmentObject(model)
+                .interactiveDismissDisabled()
+        }
+        .sheet(isPresented: Binding(get: { model.teachStep != nil && model.workout == nil },
+                                    set: { if !$0 { model.dismissTeaching() } })) {
+            TeachView()
                 .environmentObject(model)
                 .interactiveDismissDisabled()
         }

@@ -14,6 +14,9 @@ struct GravityTracker {
     private(set) var gravity: Double
     private let lever: Vec3?
     private var accelLPF: Vec3? = nil
+    private var accelSlow: Vec3? = nil
+    /// Low-passed acceleration with rotation effects removed (m/s^2).
+    private(set) var accelFiltered = Vec3.zero
     private var previousRate: Vec3? = nil
     private var stillCount = 0
     private(set) var isStill = false
@@ -30,6 +33,7 @@ struct GravityTracker {
     mutating func reset() {
         up = nil
         accelLPF = nil
+        accelSlow = nil
         previousRate = nil
         stillCount = 0
     }
@@ -50,8 +54,10 @@ struct GravityTracker {
         previousRate = w
         let aIn = a - aRot
 
-        guard var u = up, var lpf = accelLPF else {
+        guard var u = up, var lpf = accelLPF, var slow = accelSlow else {
             accelLPF = aIn
+            accelSlow = aIn
+            accelFiltered = aIn
             up = aIn.normalized
             rate = w
             return
@@ -61,10 +67,16 @@ struct GravityTracker {
         let k = dt / (rc + dt)
         lpf = lpf + (aIn - lpf) * k
         let shake = (aIn - lpf).norm
+        // Slow (1 Hz) copy: smooth translation without rotation (squat, press) shows up as a
+        // difference between the 8 Hz and 1 Hz filtered acceleration.
+        let rcSlow = 1.0 / (2.0 * Double.pi * 1.0)
+        slow = slow + (aIn - slow) * (dt / (rcSlow + dt))
+        let drift = (lpf - slow).norm
 
         // Stillness: learn gyro bias and accelerometer scale.
         let moving = w.norm * degPerRad > params.stillGyroDps
             || shake > params.stillAccelDev
+            || drift > params.stillAccelDrift
             || abs(lpf.norm - gravity) > 1.5
         stillCount = moving ? 0 : stillCount + 1
         isStill = stillCount >= params.stillSamples
@@ -89,6 +101,8 @@ struct GravityTracker {
 
         up = u
         accelLPF = lpf
+        accelSlow = slow
+        accelFiltered = lpf
         rate = w
         linearAcceleration = (lpf - u * gravity).norm
     }

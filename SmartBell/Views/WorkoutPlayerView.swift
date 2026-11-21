@@ -39,6 +39,11 @@ struct WorkoutPlayerView: View {
                             Menu {
                                 Button { workout.addSet() } label: { Label("Add a set", systemImage: "plus") }
                                 Button { workout.skipExercise() } label: { Label("Skip exercise", systemImage: "forward.end") }
+                                if let ex = workout.exercise, ex.supportsSensor, !ex.sensorBuiltIn, model.hasData {
+                                    Button { model.startTeaching(ex) } label: {
+                                        Label(model.profiles[ex.id] == nil ? "Teach SmartBell" : "Re-teach SmartBell", systemImage: "sensor")
+                                    }
+                                }
                             } label: { Image(systemName: "ellipsis.circle") }
                         }
                     }
@@ -49,6 +54,12 @@ struct WorkoutPlayerView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .sheet(isPresented: Binding(get: { model.calibrationStep != nil }, set: { if !$0 { model.dismissCalibration() } })) {
+            CalibrationView().environmentObject(model).interactiveDismissDisabled()
+        }
+        .sheet(isPresented: Binding(get: { model.teachStep != nil }, set: { if !$0 { model.dismissTeaching() } })) {
+            TeachView().environmentObject(model).interactiveDismissDisabled()
         }
         .onAppear(perform: syncCamera)
         .onChange(of: workout.source) { _, _ in syncCamera() }
@@ -96,15 +107,7 @@ struct WorkoutPlayerView: View {
     @ViewBuilder private var trackingArea: some View {
         switch workout.source {
         case .sensor:
-            VStack(spacing: 6) {
-                ArmModelView(hand: model.live.hand, path: model.live.currentPath, ghost: model.lastRep?.path ?? [],
-                             bottomDeg: model.calibration?.bottomDeg ?? 8, topDeg: model.calibration?.topDeg ?? 140,
-                             warning: model.live.linearAcceleration > 4, compact: true)
-                    .frame(height: 190)
-                if !model.hasData {
-                    Label("No SmartBell data", systemImage: "exclamationmark.triangle.fill").font(.caption.bold()).foregroundStyle(.red)
-                }
-            }
+            sensorArea
         case .camera:
             VStack(alignment: .leading, spacing: 6) {
                 ZStack(alignment: .topTrailing) {
@@ -122,6 +125,46 @@ struct WorkoutPlayerView: View {
             }
         case .manual:
             EmptyView()
+        }
+    }
+
+    @ViewBuilder private var sensorArea: some View {
+        let ex = workout.exercise
+        switch workout.sensorState {
+        case .noData:
+            Label("No SmartBell data. Check the connection.", systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline.bold()).foregroundStyle(.red)
+        case .needsCalibration:
+            InfoCard(title: "Calibrate SmartBell first",
+                     text: "15 seconds: let your arm hang still, then do 3 slow curls.",
+                     button: "Calibrate") { model.startCalibration() }
+        case .needsTeaching:
+            InfoCard(title: "Teach SmartBell \(ex?.name.lowercased() ?? "this exercise")",
+                     text: "About 10 seconds, once: hold the start position, do 3 reps, hold still. After that it counts this exercise like curls.",
+                     button: "Teach SmartBell") { if let ex { model.startTeaching(ex) } }
+        case .ready:
+            if ex?.sensorBuiltIn ?? true {
+                ArmModelView(hand: model.live.hand, path: model.live.currentPath, ghost: model.lastRep?.path ?? [],
+                             bottomDeg: model.calibration?.bottomDeg ?? 8, topDeg: model.calibration?.topDeg ?? 140,
+                             warning: model.live.linearAcceleration > 4, compact: true)
+                    .frame(height: 190)
+            } else {
+                let pct = model.live.profileProgress ?? 0
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("\(Int(max(0, pct).rounded()))%").font(.system(size: 40, weight: .bold, design: .rounded)).monospacedDigit()
+                        Text("of your range").foregroundStyle(.secondary)
+                        Spacer()
+                        Image(systemName: "sensor")
+                    }
+                    ProgressBar(value: pct / 100)
+                    if let ex, let p = model.profiles[ex.id] {
+                        Text("SmartBell · \(p.summary)").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .padding()
+                .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+            }
         }
     }
 
@@ -264,7 +307,7 @@ struct LastSetCard: View {
             }
             HStack(spacing: 16) {
                 if let s = set.formScore { Label("Form \(s)", systemImage: "checkmark.seal") }
-                if let v = set.meanSpeed { Label("\(Int(v))°/s", systemImage: "speedometer") }
+                if let v = set.meanSpeed { Label("\(Int(v))\(set.speedUnit)", systemImage: "speedometer") }
                 if let vl = set.velocityLoss { Label("−\(Int(vl * 100))% speed", systemImage: "arrow.down.right").foregroundStyle(vl >= 0.3 ? Color.orange : Color.secondary) }
             }
             .font(.caption)
@@ -303,5 +346,24 @@ struct ProgressBar: View {
         }
         .frame(height: 8)
         .animation(.linear(duration: 0.1), value: value)
+    }
+}
+
+/// A small card with an explanation and one action.
+struct InfoCard: View {
+    var title: String
+    var text: String
+    var button: String
+    var action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.headline)
+            Text(text).font(.subheadline).foregroundStyle(.secondary)
+            Button(button, action: action).buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
     }
 }

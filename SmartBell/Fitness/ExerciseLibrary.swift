@@ -2,7 +2,7 @@ import Foundation
 
 /// How a set of an exercise can be counted.
 enum TrackingMode: String, Codable, CaseIterable, Identifiable {
-    case sensor   // SmartBell on the forearm (drift-free forearm angle)
+    case sensor   // SmartBell on the forearm (curls built in; other exercises taught once)
     case camera   // phone camera + Vision body pose
     case manual   // you enter the reps
     var id: String { rawValue }
@@ -67,6 +67,9 @@ struct Exercise: Codable, Identifiable, Equatable, Hashable {
     func hash(into h: inout Hasher) { h.combine(id) }
 
     var supportsSensor: Bool { tracking.contains(.sensor) }
+    /// Curls work with SmartBell out of the box (the 15 s calibration). Everything else is
+    /// taught once: hold the start position, do 3 reps.
+    var sensorBuiltIn: Bool { id == "bicep-curl" || id == "hammer-curl" }
     var supportsCamera: Bool { tracking.contains(.camera) && camera != nil }
 }
 
@@ -78,32 +81,32 @@ enum ExerciseLibrary {
         Exercise(id: "hammer-curl", name: "Hammer curl", group: .arms, tracking: [.sensor, .camera, .manual],
                  camera: CameraRepConfig(metric: .forearmFromVertical, restDeg: 15, workDeg: 125,
                                          setupHint: "Stand side-on to the camera, whole arm in view.")),
-        Exercise(id: "overhead-triceps", name: "Overhead triceps extension", group: .arms, tracking: [.camera, .manual],
+        Exercise(id: "overhead-triceps", name: "Overhead triceps extension", group: .arms, tracking: [.camera, .sensor, .manual],
                  camera: CameraRepConfig(metric: .elbowFlexion, restDeg: 120, workDeg: 25,
                                          setupHint: "Stand side-on, elbow pointing up.")),
-        Exercise(id: "shoulder-press", name: "Shoulder press", group: .shoulders, tracking: [.camera, .manual],
+        Exercise(id: "shoulder-press", name: "Shoulder press", group: .shoulders, tracking: [.camera, .sensor, .manual],
                  camera: CameraRepConfig(metric: .elbowFlexion, restDeg: 95, workDeg: 25,
                                          setupHint: "Face the camera, arms and head in view.")),
-        Exercise(id: "lateral-raise", name: "Lateral raise", group: .shoulders, tracking: [.camera, .manual],
+        Exercise(id: "lateral-raise", name: "Lateral raise", group: .shoulders, tracking: [.camera, .sensor, .manual],
                  camera: CameraRepConfig(metric: .armRaise, restDeg: 15, workDeg: 80,
                                          setupHint: "Face the camera, hips to hands in view."), increment: 2.5),
-        Exercise(id: "front-raise", name: "Front raise", group: .shoulders, tracking: [.camera, .manual],
+        Exercise(id: "front-raise", name: "Front raise", group: .shoulders, tracking: [.camera, .sensor, .manual],
                  camera: CameraRepConfig(metric: .armRaise, restDeg: 15, workDeg: 80,
                                          setupHint: "Stand side-on, hips to hands in view.")),
-        Exercise(id: "push-up", name: "Push-up", group: .chest, tracking: [.camera, .manual],
+        Exercise(id: "push-up", name: "Push-up", group: .chest, tracking: [.camera, .sensor, .manual],
                  camera: CameraRepConfig(metric: .elbowFlexion, restDeg: 15, workDeg: 80,
                                          setupHint: "Camera at floor level, side-on, whole body in view."),
                  usesWeight: false),
-        Exercise(id: "bench-press", name: "Bench press", group: .chest, tracking: [.manual], camera: nil, increment: 5),
-        Exercise(id: "bent-row", name: "Bent-over row", group: .back, tracking: [.manual], camera: nil, increment: 5),
-        Exercise(id: "squat", name: "Squat", group: .legs, tracking: [.camera, .manual],
+        Exercise(id: "bench-press", name: "Bench press", group: .chest, tracking: [.sensor, .manual], camera: nil, increment: 5),
+        Exercise(id: "bent-row", name: "Bent-over row", group: .back, tracking: [.sensor, .manual], camera: nil, increment: 5),
+        Exercise(id: "squat", name: "Squat", group: .legs, tracking: [.camera, .sensor, .manual],
                  camera: CameraRepConfig(metric: .kneeFlexion, restDeg: 10, workDeg: 80,
                                          setupHint: "Side-on, whole body in view, phone about 2 m away."), increment: 5),
-        Exercise(id: "lunge", name: "Lunge", group: .legs, tracking: [.camera, .manual],
+        Exercise(id: "lunge", name: "Lunge", group: .legs, tracking: [.camera, .sensor, .manual],
                  camera: CameraRepConfig(metric: .kneeFlexion, restDeg: 10, workDeg: 75,
                                          setupHint: "Side-on, whole body in view."), increment: 5),
-        Exercise(id: "deadlift", name: "Romanian deadlift", group: .legs, tracking: [.manual], camera: nil, increment: 5),
-        Exercise(id: "crunch", name: "Crunch", group: .core, tracking: [.manual], camera: nil, usesWeight: false),
+        Exercise(id: "deadlift", name: "Romanian deadlift", group: .legs, tracking: [.sensor, .manual], camera: nil, increment: 5),
+        Exercise(id: "crunch", name: "Crunch", group: .core, tracking: [.sensor, .manual], camera: nil, usesWeight: false),
     ]
 
     static func exercise(_ id: String) -> Exercise? { all.first { $0.id == id } }

@@ -84,10 +84,10 @@ struct ExerciseTrends: View {
             trend("Form score", points.compactMap { p in p.formScore.map { (p.date, Double($0)) } }, domain: 0...100)
         }
         if points.contains(where: { $0.speed != nil }) {
-            trend("Average lifting speed (°/s)", points.compactMap { p in p.speed.map { (p.date, $0) } })
+            trend("Average lifting speed", points.compactMap { p in p.speed.map { (p.date, $0) } })
         }
         if points.contains(where: { $0.range != nil }) {
-            trend("Range of motion (°)", points.compactMap { p in p.range.map { (p.date, $0) } })
+            trend("Range of motion", points.compactMap { p in p.range.map { (p.date, $0) } })
         }
     }
 

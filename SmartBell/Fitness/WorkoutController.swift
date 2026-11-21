@@ -32,7 +32,7 @@ final class WorkoutController: ObservableObject {
     let unit: WeightUnit
     let previous: [String: [SetLog]]       // exerciseId -> sets from the most recent session
     private let coach: Coach
-    private let sensorReady: @MainActor () -> Bool
+    private let sensorStatus: @MainActor (Exercise) -> SensorStatus
     /// Called once when the workout finishes normally (not on cancel).
     var onFinished: (@MainActor () -> Void)?
     private let suggestedWeights: [String: Double]
@@ -47,10 +47,10 @@ final class WorkoutController: ObservableObject {
     private var restAnnounced = false
 
     init(template: WorkoutTemplate, unit: WeightUnit, isDemo: Bool, coach: Coach, store: WorkoutStore,
-         sensorReady: @escaping @MainActor () -> Bool) {
+         sensorStatus: @escaping @MainActor (Exercise) -> SensorStatus) {
         self.unit = unit
         self.coach = coach
-        self.sensorReady = sensorReady
+        self.sensorStatus = sensorStatus
         var prev: [String: [SetLog]] = [:]
         var sugg: [String: Double] = [:]
         for item in template.items where prev[item.exerciseId] == nil {
@@ -74,8 +74,14 @@ final class WorkoutController: ObservableObject {
     var totalSets: Int { max(plan.sets, currentLog.sets.count) }
     var isDone: Bool { phase == .finished }
 
+    /// SmartBell readiness for the current exercise.
+    var sensorState: SensorStatus { exercise.map { sensorStatus($0) } ?? .noData }
+
     var availableSources: [TrackingMode] {
-        (exercise?.tracking ?? [.manual]).filter { $0 != .sensor || sensorReady() }
+        guard let ex = exercise else { return [.manual] }
+        // SmartBell is offered whenever it's streaming; if this exercise still needs
+        // calibrating or teaching, the workout screen offers to do that.
+        return ex.tracking.filter { $0 != .sensor || sensorStatus(ex) != .noData }
     }
 
     // MARK: - lifecycle
@@ -265,7 +271,7 @@ final class WorkoutController: ObservableObject {
         let p = plan
         weight = suggestedWeights[p.exerciseId] ?? p.weight
         targetReps = p.reps
-        if let ex, ex.supportsSensor, sensorReady() { source = .sensor }
+        if let ex, ex.supportsSensor, sensorStatus(ex) == .ready { source = .sensor }
         else if let ex, ex.supportsCamera { source = .camera }
         else { source = .manual }
         cameraCounter = ex?.camera.map { AngleRepCounter(config: $0) }

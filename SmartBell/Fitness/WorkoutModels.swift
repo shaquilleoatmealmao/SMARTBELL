@@ -76,6 +76,9 @@ struct SetLog: Codable, Identifiable, Equatable {
         return cameraReps.filter(\.counted).map { $0.romDeg / max($0.upSeconds, 0.1) }
     }
 
+    /// Taught exercises measure in % of your learned range; curls and camera in degrees.
+    var speedUnit: String { sensorReps.first?.isGeneric == true ? "%/s" : "°/s" }
+
     var meanSpeed: Double? {
         let s = repSpeeds
         return s.isEmpty ? nil : s.reduce(0, +) / Double(s.count)

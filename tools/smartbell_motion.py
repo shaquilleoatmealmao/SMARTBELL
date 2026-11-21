@@ -71,6 +71,7 @@ class Params:
     trust_sigma: float = 1.0           # m/s^2, accel trusted only when |a| is within ~sigma of g
     still_gyro_dps: float = 6.0        # still if bias-corrected |gyro| below this...
     still_accel_dev: float = 0.35      # ...and accel is not shaking (m/s^2 from its low-pass)
+    still_accel_drift: float = 0.15    # ...and not slowly changing (8 Hz vs 1 Hz filtered, m/s^2)
     still_samples: int = 25            # ...for this many consecutive samples (0.25 s)
     bias_alpha: float = 0.02           # per still sample, gyro-bias learning rate
     bias_max_dps: float = 10.0         # never learn a bias bigger than this
@@ -91,6 +92,7 @@ class Calibration:
     twist_ref: float = 8.0             # typical wrist rotation (deg) in calibration reps
     sway_ref: float = 4.0              # typical sideways wobble (deg) in calibration reps
     template: list = field(default_factory=list)  # 40-pt time-normalised beta curve
+    generic: bool = False              # True for taught exercises: generic form rules, units = % of range
 
     @property
     def side(self):
@@ -118,6 +120,7 @@ class GravityTracker:
         self.g = cal.gravity if cal else G0
         self.lever = mul(cal.forearm, p.lever_m) if cal else None
         self.a_lpf = None
+        self.a_slow = None
         self.prev_w = None
         self.still_count = 0
         self.is_still = False
@@ -128,6 +131,7 @@ class GravityTracker:
     def reset(self):
         self.u = None
         self.a_lpf = None
+        self.a_slow = None
         self.prev_w = None
         self.still_count = 0
 
@@ -151,6 +155,7 @@ class GravityTracker:
 
         if self.u is None or self.a_lpf is None:
             self.a_lpf = a_in
+            self.a_slow = a_in
             self.u = normalized(a_in)
             self.w = w
             self.a_corr = a_in
@@ -159,10 +164,14 @@ class GravityTracker:
         k = lpf_alpha(p.accel_lpf_hz, dt)
         self.a_lpf = add(self.a_lpf, mul(sub(a_in, self.a_lpf), k))
         shake = norm(sub(a_in, self.a_lpf))
+        # slow (1 Hz) copy: smooth translation without rotation (squat, press) shows up as a
+        # difference between the 8 Hz and 1 Hz filtered acceleration
+        self.a_slow = add(self.a_slow, mul(sub(a_in, self.a_slow), lpf_alpha(1.0, dt)))
+        drift = norm(sub(self.a_lpf, self.a_slow))
 
         # stillness -> learn gyro bias and accelerometer scale
         moving = norm(w) * 180.0 / math.pi > p.still_gyro_dps or shake > p.still_accel_dev \
-            or abs(norm(self.a_lpf) - self.g) > 1.5
+            or drift > p.still_accel_drift or abs(norm(self.a_lpf) - self.g) > 1.5
         self.still_count = 0 if moving else self.still_count + 1
         self.is_still = self.still_count >= p.still_samples
         if self.is_still:
@@ -301,7 +310,9 @@ class RepDetector:
             elif f.t - self.start_t > 12.0:
                 self._to_idle(f)
         elif self.state == self.SETTLE:
-            if f.beta < self.valley:
+            # a new low only counts if it's clearly lower: a slow creep toward the bottom
+            # mustn't keep the rep open forever
+            if f.beta < self.valley - 0.5:
                 self.valley, self.valley_t = f.beta, f.t
             if f.beta > self.valley + 4.0 or f.t - self.valley_t > 0.35:
                 if self.counted or self.peak >= cal.start_deg + 8.0:
@@ -353,24 +364,39 @@ class RepDetector:
         path_rms = rms([a - b for a, b in zip(curve, cal.template)]) if cal.template else 0.0
 
         issues = []  # (priority, key, message, penalty)
-        if swing > 4.0:
-            issues.append((1, "swing", "Don't swing - keep your body still", 30))
-        if peak > cal.top_deg + 18.0:
-            issues.append((2, "elbow", "Keep your elbow pinned to your side", 20))
-        if not self.counted:
-            issues.append((3, "partial", "Curl all the way up", 35))
-        elif peak < cal.top_deg - 20.0:
-            issues.append((3, "short_top", "Curl a little higher", 20))
-        if bottom > cal.bottom_deg + 20.0:
-            issues.append((4, "short_bottom", "Lower all the way down", 15))
-        if eccentric < 0.7:
-            issues.append((5, "fast_down", "Lower slower - about 2 seconds", 15))
-        if concentric < 0.35:
-            issues.append((6, "fast_up", "Lift with control, not momentum", 10))
-        if twist > max(30.0, 2.0 * cal.twist_ref + 10.0):
-            issues.append((7, "twist", "Keep your wrist from twisting", 10))
-        if sway > max(15.0, 2.0 * cal.sway_ref + 8.0):
-            issues.append((8, "sway", "Keep the dumbbell in a straight path", 15))
+        if cal.generic:
+            # taught exercise: the signal is "% of your learned range", so only range, tempo, twist
+            if not self.counted:
+                issues.append((3, "partial", "Go through the full range", 35))
+            elif peak < cal.top_deg - 20.0:
+                issues.append((3, "short_top", "Go a little further", 20))
+            if bottom > cal.bottom_deg + 20.0:
+                issues.append((4, "short_bottom", "Return fully to the start", 15))
+            if eccentric < 0.5:
+                issues.append((5, "fast_down", "Slower on the way back", 15))
+            if concentric < 0.3:
+                issues.append((6, "fast_up", "Control the movement, no bouncing", 10))
+            if twist > max(30.0, 2.0 * cal.twist_ref + 15.0):
+                issues.append((7, "twist", "Keep your wrist steady", 10))
+        else:
+            if swing > 4.0:
+                issues.append((1, "swing", "Don't swing - keep your body still", 30))
+            if peak > cal.top_deg + 18.0:
+                issues.append((2, "elbow", "Keep your elbow pinned to your side", 20))
+            if not self.counted:
+                issues.append((3, "partial", "Curl all the way up", 35))
+            elif peak < cal.top_deg - 20.0:
+                issues.append((3, "short_top", "Curl a little higher", 20))
+            if bottom > cal.bottom_deg + 20.0:
+                issues.append((4, "short_bottom", "Lower all the way down", 15))
+            if eccentric < 0.7:
+                issues.append((5, "fast_down", "Lower slower - about 2 seconds", 15))
+            if concentric < 0.35:
+                issues.append((6, "fast_up", "Lift with control, not momentum", 10))
+            if twist > max(30.0, 2.0 * cal.twist_ref + 10.0):
+                issues.append((7, "twist", "Keep your wrist from twisting", 10))
+            if sway > max(15.0, 2.0 * cal.sway_ref + 8.0):
+                issues.append((8, "sway", "Keep the dumbbell in a straight path", 15))
         issues.sort()
         score = max(0, 100 - sum(i[3] for i in issues))
         return RepResult(self.attempts, self.counted, seg[0].t, self.peak_t, seg[-1].t,
@@ -424,11 +450,13 @@ class MotionEngine:
       twist_deg   wrist rotation about the forearm since the rep started
     """
 
-    def __init__(self, cal: Calibration, p: Params | None = None):
+    def __init__(self, cal: Calibration, p: Params | None = None, profile: "MotionProfile | None" = None):
         self.p = p or Params()
         self.cal = cal
+        self.profile = profile
         self.tracker = GravityTracker(self.p, cal)
-        self.detector = RepDetector(cal)
+        self.detector = RepDetector(profile.detector_calibration(cal) if profile else cal)
+        self.signal = ProfileSignal(profile) if profile else None
         self.t = 0.0
         self.beta = 0.0
         self.ref = None          # horizontal world reference, sensor frame
@@ -443,7 +471,11 @@ class MotionEngine:
         tr.update((ax, ay, az), (gx, gy, gz), dt)
         cal = self.cal
         u = tr.u
-        self.beta = forearm_angle_deg(u, cal.forearm)
+        if self.signal:
+            # taught exercise: % of the learned range (0 = start position, 100 = end position)
+            self.beta = self.signal.update(tr, dt)
+        else:
+            self.beta = forearm_angle_deg(u, cal.forearm)
         w = mul(tr.w, 180.0 / math.pi)
         d = min(max(dt, 0.001), 0.05)
 
@@ -474,6 +506,201 @@ class MotionEngine:
             self.heading = math.atan2(ry, rx)
             self.twist_deg = 0.0
         return events
+
+
+# ----------------------------------------------------------------------------- taught exercises
+class VerticalMotion:
+    """Height change of the sensor during a rep, without long-term drift.
+
+    a_v = |a| - g_ref is the vertical acceleration: |g + a_lin| = g + (vertical part of a_lin)
+    to first order, whatever way the sensor is tilted (horizontal parts only add a_h^2 / 2g),
+    so no orientation estimate is needed and gyro drift can't leak in.
+
+    Integrating twice gives height. Plain double integration drifts, so:
+      - velocity is zeroed whenever the arm is still (zero-velocity update) and bleeds slowly
+        toward zero otherwise; g_ref is re-learned while still;
+      - height is re-anchored to zero at the start of every rep: the moment the velocity
+        clearly heads outward again (past 25% of the learned peak speed) you have just left the
+        start position. That's "reset the position after each rep", detected from the motion
+        itself, so errors only live for one rep.
+    `out_sign` is +1 if the rep moves up first (press, row), -1 if down first (squat);
+    `v_peak` is the typical outward speed learned while teaching (0 = no re-anchoring).
+    """
+    TAU_V = 15.0         # s, velocity bleed between stops
+
+    def __init__(self, out_sign: float = 0.0, v_peak: float = 0.0):
+        self.out_sign = out_sign
+        self.v_peak = v_peak
+        self.mean = None
+        self.v = 0.0
+        self.z = 0.0
+        self.outward = False
+
+    def update(self, a_lpf, u, g, dt, still=False, gyro_dps=0.0):
+        dt = min(max(dt, 0.001), 0.05)
+        av = norm(a_lpf)
+        if self.mean is None:
+            self.mean = av
+        if still:
+            self.mean += (av - self.mean) * 0.05
+            self.v = 0.0
+            self.z -= self.z * min(dt / 1.0, 1.0)
+            self.outward = False
+            return self.z
+        # (no "zero acceleration means stopped" shortcut: mid-rep, at constant speed, the
+        # acceleration is also zero)
+        self.v += (av - self.mean) * dt
+        self.v -= self.v * dt / self.TAU_V
+        if self.v_peak > 0:
+            sv = self.out_sign * self.v
+            if not self.outward and sv > 0.25 * self.v_peak:
+                self.outward = True
+                self.z = 0.0                     # leaving the start position: re-anchor
+            elif self.outward and sv < -0.25 * self.v_peak:
+                self.outward = False             # on the way back
+        self.z += self.v * dt
+        return self.z
+
+
+def arc_angle_deg(u, start, axis):
+    """Signed angle (deg) of u around `axis`, measured from `start`."""
+    up = sub(u, mul(axis, dot(axis, u)))
+    if norm(up) < 1e-6:
+        return 0.0
+    up = normalized(up)
+    return math.degrees(math.atan2(dot(axis, cross(start, up)), dot(start, up)))
+
+
+@dataclass
+class MotionProfile:
+    """What SmartBell learned from 3 reps of one exercise."""
+    exercise: str
+    channel: str                       # "orientation" or "vertical"
+    u_start: tuple = (0.0, 0.0, 1.0)   # gravity direction (sensor frame) at the start position
+    axis: tuple = (1.0, 0.0, 0.0)      # rotation axis from start to end position
+    rom_deg: float = 0.0               # orientation channel: start -> end angle
+    amplitude: float = 0.0             # vertical channel: signed height change of a rep, m
+    v_peak: float = 0.0                # vertical channel: typical outward speed, m/s
+    template: list = field(default_factory=list)
+    twist_ref: float = 8.0
+
+    def detector_calibration(self, base: Calibration) -> Calibration:
+        c = Calibration(**{**base.__dict__})
+        c.bottom_deg, c.top_deg = 0.0, 100.0
+        c.template = self.template
+        c.twist_ref = self.twist_ref
+        c.generic = True
+        return c
+
+
+class ProfileSignal:
+    """Turns the tracker state into "% of the learned range" for a taught exercise."""
+
+    def __init__(self, profile: MotionProfile):
+        self.p = profile
+        self.vm = VerticalMotion(1.0 if profile.amplitude > 0 else -1.0, profile.v_peak)
+
+    def update(self, tr, dt):
+        z = self.vm.update(tr.a_corr, tr.u, tr.g, dt, tr.is_still, norm(tr.w) * 180.0 / math.pi)
+        if self.p.channel == "orientation":
+            return 100.0 * arc_angle_deg(tr.u, self.p.u_start, self.p.axis) / max(self.p.rom_deg, 1e-6)
+        return 100.0 * z / (self.p.amplitude if abs(self.p.amplitude) > 1e-6 else 1.0)
+
+
+def _peaks(ts, ys, min_height, min_gap=0.6):
+    """Local maxima above min_height, at least min_gap s apart (keeps the higher)."""
+    out = []
+    for i in range(1, len(ys) - 1):
+        if ys[i] >= min_height and ys[i] >= ys[i - 1] and ys[i] > ys[i + 1]:
+            if out and ts[i] - ts[out[-1]] < min_gap:
+                if ys[i] > ys[out[-1]]:
+                    out[-1] = i
+            else:
+                out.append(i)
+    return out
+
+
+def teach(rows, base: Calibration, hold_s: float = 1.5, exercise: str = "exercise", p: Params | None = None):
+    """Learn an exercise from a recording: still in the start position for `hold_s`, then ~3 reps.
+
+    Tries both channels and keeps the one whose replay through the real engine finds the
+    clearest reps. Returns (profile or None, info dict).
+    """
+    p = p or Params()
+    tr = GravityTracker(p, base)
+    vm = VerticalMotion()
+    ts, us, zs, vs = [], [], [], []
+    t = 0.0
+    for r in rows:
+        t += r[6]
+        tr.update(r[0:3], r[3:6], r[6])
+        zs.append(vm.update(tr.a_corr, tr.u, tr.g, r[6], tr.is_still, norm(tr.w) * 180.0 / math.pi))
+        vs.append(vm.v)
+        ts.append(t)
+        us.append(tr.u)
+    hold = [u for tt, u in zip(ts, us) if 0.3 <= tt <= hold_s]
+    if not hold:
+        return None, {"error": "no start position"}
+    s0 = normalized(tuple(map(sum, zip(*hold))))
+    after = [i for i, tt in enumerate(ts) if tt > hold_s]
+
+    candidates = []
+    # orientation: direction farthest from the start, averaged over the rep peaks
+    ang = [math.degrees(math.acos(max(-1, min(1, dot(us[i], s0))))) for i in after]
+    if ang and max(ang) >= 20:
+        pk = _peaks([ts[i] for i in after], ang, 0.6 * max(ang))
+        if pk:
+            e = normalized(tuple(map(sum, zip(*[us[after[k]] for k in pk]))))
+            axis = cross(s0, e)
+            if norm(axis) > 0.2:
+                rom = math.degrees(math.acos(max(-1, min(1, dot(s0, e)))))
+                candidates.append(MotionProfile(exercise, "orientation", s0, normalized(axis), rom_deg=rom))
+    # vertical: the first movement after the hold sets the direction (up for a press, down for a
+    # squat); its extreme, before it heads back, sets a first guess of the amplitude
+    zz = [zs[i] for i in after]
+    first = next((k for k, z in enumerate(zz) if abs(z) > 0.06), None)
+    if first is not None:
+        sign = 1.0 if zz[first] > 0 else -1.0
+        k, ext = first, 0.0
+        while k < len(zz) and sign * zz[k] > 0.3 * ext:
+            ext = max(ext, sign * zz[k])
+            k += 1
+        if ext >= 0.06:
+            vpk = max(sign * vs[after[j]] for j in range(first, k)) if k > first else 0.0
+            if vpk > 0.05:
+                candidates.append(MotionProfile(exercise, "vertical", s0, amplitude=sign * ext, v_peak=vpk))
+
+    # pad with a moment of the last reading so a rep that just ended gets analysed
+    padded = list(rows) + [list(rows[-1][:6]) + [0.01]] * 60
+
+    def replay(c):
+        eng = MotionEngine(base, p, c)
+        out = []
+        for r in padded:
+            for ev in eng.push(*r):
+                if ev[0] == "result" and ev[1].counted:
+                    out.append(ev[1])
+        return out
+
+    best, info = None, {"tried": []}
+    for c in candidates:
+        res = replay(c)
+        if c.channel == "vertical" and res:
+            # refine: scale so the median taught rep peaks at 100%
+            c.amplitude *= sorted(r.top_deg for r in res)[len(res) // 2] / 100.0
+            res = replay(c)
+        tops = [r.top_deg for r in res]
+        spread = (max(tops) - min(tops)) if tops else 999
+        score = len(res) * 10 - spread / 10 + (15 if c.channel == "orientation" else 0)  # prefer drift-free
+        info["tried"].append((c.channel, len(res), round(spread, 1), round(c.rom_deg or c.amplitude, 3)))
+        if len(res) >= 2 and (best is None or score > best[0]):
+            c.template = [sum(r.curve[i] for r in res) / len(res) for i in range(40)]
+            c.twist_ref = sorted(r.twist_range for r in res)[len(res) // 2]
+            best = (score, c, len(res))
+    if best is None:
+        return None, info
+    info["reps"] = best[2]
+    return best[1], info
 
 
 # ----------------------------------------------------------------------------- calibration builder

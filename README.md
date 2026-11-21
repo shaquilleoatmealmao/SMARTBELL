@@ -7,9 +7,10 @@ This is a rewrite of the app in `ez-codes-07/smart-bell`. The firmware is unchan
 ## What it does
 
 **Tracking**
+- **SmartBell, any exercise:** curls work after a 15-second calibration. Any other exercise you **teach once**: hold the start position, do 3 reps, hold still. SmartBell learns whether that exercise tilts your forearm (raises, push-ups, triceps; tracked as precisely as curls) or moves it up and down (squats, presses, rows; counts reps reliably, depth checks approximate), and counts it from then on. Manage taught exercises under **Device › SmartBell exercises**, or tap **Teach SmartBell** on the workout screen.
 - **SmartBell (curls):** counts reps from the forearm's angle to gravity. That angle can't drift, so counting doesn't depend on speed and doesn't degrade over a set. After every rep you get a form score and one spoken cue covering swinging, elbow drift, partial range, tempo, wrist twist or a wobbly path. A live arm model draws each rep.
 - **Camera (any supported exercise):** Apple Vision body-pose detection (`VNDetectHumanBodyPoseRequest`) tracks your skeleton and counts squats, lunges, push-ups, presses, raises, triceps extensions and curls from joint angles.
-- **Manual** for everything else: bench press, rows, deadlifts, crunches.
+- **Manual** for anything, any time.
 
 **Workouts**
 - Built-in workouts: Arm day, Upper body, Full body starter, and Elbow mobility (rehab). You can also build your own: exercises, sets, reps, weight and rest.
@@ -54,7 +55,7 @@ With a free Apple ID the app stops opening after 7 days. Press Run in Xcode agai
 1. **Connect:** power the ESP32 and tap **Find SmartBell** on the **Train** tab. It reconnects automatically after the first time. To try the app without hardware, tap **Try demo**.
 2. **Calibrate** (SmartBell only): strap the box on the back of the forearm just below the elbow. Let the arm hang still holding the dumbbell, then do 3 slow, full curls. Redo this whenever the strap moves.
 3. **Start a workout:** on **Train**, tap ▶ on a workout or pick an exercise under **Quick start**.
-4. **Tracking:** curls use the SmartBell when it's connected and calibrated. Exercises the camera supports use the camera. Prop the phone up so your whole body (or arm) is in view, side-on as the on-screen hint says. Everything else is manual. You can switch tracking at the top of the workout screen.
+4. **Tracking:** pick SmartBell, Camera or Manual at the top of the workout screen. SmartBell is chosen automatically for curls and for any exercise you've taught it. For an exercise it doesn't know yet, choose SmartBell and tap **Teach SmartBell** (about 10 seconds, once). Exercises the camera supports use the camera by default. Prop the phone up so your whole body (or arm) is in view, side-on as the on-screen hint says. Everything else is manual. You can switch tracking at the top of the workout screen.
 5. **Lift:** the first rep starts the set, and pausing for a few seconds ends it. Rest, rate the set if you like, and the next set starts when you start lifting.
 6. **Review:** see the summary at the end, then check **Progress** and **History**.
 
@@ -65,7 +66,7 @@ Voice counting, form cues, workout guidance and vibration can each be turned off
 ```
 SmartBell/
   App/         SmartBellApp (tabs), AppModel (wires sensor, camera and workouts together)
-  Motion/      Vec3, GravityTracker, RepDetector, MotionEngine, Calibrator   <- SmartBell algorithm
+  Motion/      Vec3, GravityTracker, RepDetector, MotionEngine, Calibrator, ExerciseProfile (teaching)
   Camera/      PoseCamera (AVFoundation + Vision), PoseGeometry (joint angles), AngleRepCounter, CameraLab
   Fitness/     ExerciseLibrary, WorkoutModels (sessions, sets, progression), WorkoutController, FitnessStats
   Sensor/      BLEManager (CoreBluetooth), DemoSensor (simulated arm), Recorder (CSV)
@@ -108,6 +109,7 @@ cd tools
 python3 evaluate.py --seeds 20               # simulated sessions: rep count, angle error, cue accuracy
 python3 evaluate.py --plot angle.png         # one session, plotted
 python3 replay_csv.py my-recording.csv --plot out.png   # a recording from the app (Device › Recordings › share)
+python3 simulate_exercises.py --seeds 20     # teach + count squat, press, lateral raise, row, push-up
 ```
 
 To record: **Device › Record raw data**, do a set, stop, then share the file to your laptop. Write down what you actually did (e.g. "10 reps, #4 partial, #7 swung"), so the output can be checked against it.
@@ -117,7 +119,7 @@ If you add or move Swift files, add them in Xcode (File › Add Files). `tools/g
 ## Limits
 
 - SmartBell accuracy numbers are from simulation only. Use the Camera tab's comparison, or labelled recordings, before quoting accuracy.
-- The SmartBell tracks curls only. The angle-to-gravity method works because the forearm rotates about the elbow. A shoulder press moves the forearm mostly in translation and needs a different model (e.g. a sensor on the upper arm). Other exercises use the camera.
+- Taught up-down exercises (squats, presses, rows) are measured by integrating acceleration over one rep at a time. They count reps reliably in simulation, but depth and partial-rep judgements are approximate. Arm-tilting exercises are as precise as curls. Re-teach an exercise if you move the strap, because the profile is tied to how the box sits on your arm.
 - Camera thresholds (rest and work angles per exercise) are reasonable starting values, not tuned on real people yet. Camera tracking needs decent light and the right side of your body in view.
 - Progression and speed-loss advice follow common training rules of thumb. They aren't personalised coaching.
 - The upper arm is assumed vertical when drawing the arm. A body swing or elbow drift shows up as the cues above, not in the drawing.

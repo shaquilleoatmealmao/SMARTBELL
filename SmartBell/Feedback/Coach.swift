@@ -52,7 +52,7 @@ final class Coach {
         if top == lastCue && Date().timeIntervalSince(lastCueTime) < 6 { return }
         lastCue = top
         lastCueTime = Date()
-        say(top.cue)
+        say(top.cueText(generic: r.isGeneric))
     }
 
     /// Workout guidance (set announcements, rest timer). Can be muted separately from rep counts.

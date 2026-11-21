@@ -12,6 +12,7 @@ struct MotionParams {
     var trustSigma = 1.0          // m/s^2: accel trusted only when |a| is near g
     var stillGyroDps = 6.0        // still if bias-corrected |gyro| below this...
     var stillAccelDev = 0.35      // ...and accel isn't shaking (m/s^2 from its low-pass)
+    var stillAccelDrift = 0.15    // ...and isn't slowly changing (8 Hz vs 1 Hz filtered, m/s^2)
     var stillSamples = 25         // ...for this many consecutive samples (0.25 s)
     var biasAlpha = 0.02          // per still sample, gyro-bias learning rate
     var biasMaxDps = 10.0         // never learn a bias bigger than this
@@ -32,6 +33,10 @@ struct Calibration: Codable, Equatable {
     var swayRef = 4.0               // typical sideways wobble (deg) in calibration reps
     var template: [Double] = []     // 40-point time-normalised forearm-angle curve
     var date = Date()
+    /// true for taught exercises: units are % of the learned range and form rules are generic.
+    /// Optional so calibrations saved by older versions still decode.
+    var generic: Bool? = nil
+    var isGeneric: Bool { generic == true }
 
     var rom: Double { max(topDeg - bottomDeg, 40.0) }
     var startDeg: Double { bottomDeg + 0.30 * rom }
@@ -95,6 +100,21 @@ enum FormIssue: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Cue for taught (non-curl) exercises, where only range, tempo and twist are judged.
+    var genericCue: String {
+        switch self {
+        case .partial: "Go through the full range."
+        case .shortTop: "Go a little further."
+        case .shortBottom: "Return fully to the start."
+        case .fastDown: "Slower on the way back."
+        case .fastUp: "Control the movement, no bouncing."
+        case .twist: "Keep your wrist steady."
+        default: cue
+        }
+    }
+
+    func cueText(generic: Bool) -> String { generic ? genericCue : cue }
+
     var label: String {
         switch self {
         case .swing: "Swinging"
@@ -130,6 +150,8 @@ struct RepResult: Codable, Identifiable, Equatable {
     var issues: [FormIssue]
     var curve: [Double]             // 40-point forearm angle curve
     var path: [Vec3] = []           // hand path in the rep's own frame (fwd, side, up), for drawing
+    var generic: Bool? = nil        // true for taught exercises (values in % of learned range)
+    var isGeneric: Bool { generic == true }
 
     /// 0...100, how close the rep's shape was to the calibration reps.
     var consistency: Int { max(0, min(100, Int((100 - pathRmsDeg * 2.5).rounded()))) }

@@ -16,6 +16,17 @@ struct LiveState {
     var sampleRate = 0.0
     var secondsSinceSample = Double.infinity
     var gyroBias = Vec3.zero
+    var profileProgress: Double? = nil   // taught exercise in use: % of the learned range
+}
+
+/// SmartBell readiness for one exercise.
+enum SensorStatus: Equatable { case ready, needsCalibration, needsTeaching, noData }
+
+enum TeachStep: Equatable {
+    case hold(progress: Double)
+    case reps(seconds: Double, level: Double, canFinish: Bool)
+    case done(MotionProfile)
+    case failed(String)
 }
 
 enum CalibrationStep: Equatable {
@@ -53,8 +64,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var calibrationStep: CalibrationStep?
     @Published private(set) var lastRep: RepResult?
     @Published private(set) var workout: WorkoutController?
+    @Published private(set) var profiles: [String: MotionProfile] = [:]
+    @Published private(set) var teachStep: TeachStep?
+    @Published private(set) var teachingExercise: Exercise?
 
     private var engine: MotionEngine?
+    private var profileEngine: MotionEngine?     // runs the taught exercise in the current workout
+    private var teacher: ExerciseTeacher?
+    private static let profilesKey = "exerciseProfiles.v1"
     private var calibrator: Calibrator?
     private var partialCalibration: Calibration?
     private var calibrationStart = Date()
@@ -71,6 +88,10 @@ final class AppModel: ObservableObject {
            let cal = try? JSONDecoder().decode(Calibration.self, from: data) {
             calibration = cal
             engine = MotionEngine(calibration: cal)
+        }
+        if let data = UserDefaults.standard.data(forKey: Self.profilesKey),
+           let p = try? JSONDecoder().decode([String: MotionProfile].self, from: data) {
+            profiles = p
         }
         ble.onSample = { [weak self] s in self?.handle(s, from: .sensor) }
         demo.onSample = { [weak self] s in self?.handle(s, from: .demo) }
@@ -114,17 +135,46 @@ final class AppModel: ObservableObject {
             handleCalibration(s)
             return
         }
-        guard engine != nil else { return }
-        let events = engine!.push(s)  // mutate in place
-        for e in events {
-            switch e {
-            case .counted:
-                workout?.sensorCounted()
-            case .result(let r):
-                lastRep = r
-                workout?.sensorResult(r)
+        if teacher != nil {
+            handleTeaching(s)
+            return
+        }
+        let current = workout?.exercise
+        let curlInUse = current?.sensorBuiltIn ?? false
+        if engine != nil {
+            let events = engine!.push(s)  // mutate in place
+            for e in events {
+                switch e {
+                case .counted:
+                    if curlInUse { workout?.sensorCounted() }
+                case .result(let r):
+                    lastRep = r
+                    if curlInUse { workout?.sensorResult(r) }
+                }
             }
         }
+        // taught exercise: its own engine with the learned profile
+        if let ex = current, !ex.sensorBuiltIn, let profile = profiles[ex.id] {
+            if profileEngine?.profile != profile {
+                profileEngine = MotionEngine(calibration: calibration ?? Calibration(), profile: profile)
+            }
+            let events = profileEngine!.push(s)
+            for e in events {
+                switch e {
+                case .counted: workout?.sensorCounted()
+                case .result(let r): workout?.sensorResult(r)
+                }
+            }
+        } else if profileEngine != nil {
+            profileEngine = nil
+        }
+    }
+
+    /// SmartBell readiness for an exercise right now.
+    func sensorStatus(for ex: Exercise) -> SensorStatus {
+        guard hasData else { return .noData }
+        if ex.sensorBuiltIn { return calibration != nil ? .ready : .needsCalibration }
+        return profiles[ex.id] != nil ? .ready : .needsTeaching
     }
 
     /// Every camera frame (main thread).
@@ -164,6 +214,7 @@ final class AppModel: ObservableObject {
             history.append(l.beta)
             if history.count > 180 { history.removeFirst(history.count - 180) }
         }
+        l.profileProgress = profileEngine?.beta
         l.angleHistory = history
         // Nothing streaming: publish once so the UI shows "no data", then stay quiet.
         if l.secondsSinceSample > 1.5 && live.secondsSinceSample > 1.5 { return }
@@ -244,13 +295,11 @@ final class AppModel: ObservableObject {
 
     // MARK: - workouts
 
-    /// SmartBell can count right now: calibrated and streaming.
-    var sensorReady: Bool { calibration != nil && hasData }
 
     func startWorkout(_ template: WorkoutTemplate, unit: WeightUnit) {
         guard !template.items.isEmpty else { return }
         let w = WorkoutController(template: template, unit: unit, isDemo: isDemo, coach: coach, store: store,
-                                  sensorReady: { [weak self] in self?.sensorReady ?? false })
+                                  sensorStatus: { [weak self] ex in self?.sensorStatus(for: ex) ?? .noData })
         w.onFinished = { [weak self, weak w] in
             guard let self, let w else { return }
             if !w.session.allSets.isEmpty { self.store.add(w.session) }
@@ -279,6 +328,69 @@ final class AppModel: ObservableObject {
 
     /// Close the summary after a finished workout.
     func closeWorkout() { workout = nil }
+
+    // MARK: - teaching SmartBell an exercise
+
+    func startTeaching(_ ex: Exercise) {
+        teacher = ExerciseTeacher(exerciseId: ex.id, base: calibration ?? Calibration())
+        teachingExercise = ex
+        teachStep = .hold(progress: 0)
+        if demo.isRunning { demo.restart(script: .calibration) } // demo: still, then 3 slow reps
+    }
+
+    /// Finish now (allowed after a few seconds of movement) instead of waiting for the pause.
+    func finishTeachingNow() { finishTeaching() }
+
+    func cancelTeaching() {
+        teacher = nil
+        teachStep = nil
+        teachingExercise = nil
+        if demo.isRunning { demo.restart(script: .workout) }
+    }
+
+    /// Close the teaching sheet after success or failure.
+    func dismissTeaching() {
+        if teacher != nil { cancelTeaching() }
+        teachStep = nil
+        teachingExercise = nil
+    }
+
+    func forgetProfile(_ exerciseId: String) {
+        profiles[exerciseId] = nil
+        saveProfiles()
+    }
+
+    private func handleTeaching(_ s: SensorSample) {
+        guard teacher != nil else { return }
+        teacher!.push(s)
+        let t = teacher!
+        let step: TeachStep
+        switch t.phase {
+        case .hold: step = .hold(progress: (t.holdProgress * 20).rounded() / 20)
+        case .reps: step = .reps(seconds: (t.moveSeconds * 2).rounded() / 2, level: (t.motionLevel * 10).rounded() / 10,
+                                 canFinish: t.canFinish)
+        }
+        if step != teachStep { teachStep = step }
+        if t.readyToFinish { finishTeaching() }
+    }
+
+    private func finishTeaching() {
+        guard let t = teacher else { return }
+        teacher = nil
+        if demo.isRunning { demo.restart(script: .workout) }
+        guard let p = t.finish() else {
+            teachStep = .failed("Couldn't find a clear repeating movement. Make sure the strap is snug, start from a still position, and do 3 full reps at a steady pace.")
+            return
+        }
+        profiles[p.exerciseId] = p
+        saveProfiles()
+        teachStep = .done(p)
+        if let w = workout, w.exercise?.id == p.exerciseId { w.setSource(.sensor) }
+    }
+
+    private func saveProfiles() {
+        if let data = try? JSONEncoder().encode(profiles) { UserDefaults.standard.set(data, forKey: Self.profilesKey) }
+    }
 
     // MARK: - recording / replay
 
