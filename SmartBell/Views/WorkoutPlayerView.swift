@@ -209,7 +209,7 @@ struct WorkoutPlayerView: View {
             }
             .buttonStyle(.borderedProminent)
             if workout.source != .manual {
-                Text("Or just start lifting. The first rep starts the set and a short pause ends it.")
+                Text("Or just start lifting. The first rep starts the set. Tap Done when you finish.")
                     .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
         }
@@ -244,12 +244,6 @@ struct WorkoutPlayerView: View {
                 .padding()
                 .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
             }
-            if workout.source != .manual {
-                Text(workout.reps >= workout.targetReps
-                     ? "Target reached. Rest for 5 s and the set finishes, or tap Done."
-                     : "Keep going. The set only finishes on its own after a 12 s pause.")
-                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            }
             Button {
                 workout.finishSet()
             } label: {
@@ -276,19 +270,6 @@ struct WorkoutPlayerView: View {
                 }
             }
             .frame(width: 200, height: 200)
-
-            if workout.canResume {
-                VStack(spacing: 6) {
-                    Text("The set ended after a pause. Not done? Keep lifting and it carries on, or tap below.")
-                        .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    Button {
-                        workout.resumeSet()
-                    } label: {
-                        Label("Continue this set", systemImage: "arrow.uturn.backward")
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
 
             HStack(spacing: 12) {
                 Button("+30 s") { workout.extendRest(30) }.buttonStyle(.bordered)

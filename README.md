@@ -1,6 +1,6 @@
 # SmartBell v2
 
-iPhone fitness tracker built around the SmartBell forearm sensor (ESP32 + BMX160) and the phone camera. It runs guided workouts hands-free: it counts reps, ends sets when you pause, times your rest, coaches form by voice and vibration, suggests next session's weights, and graphs your progress.
+iPhone fitness tracker built around the SmartBell forearm sensor (ESP32 + BMX160) and the phone camera. It runs guided workouts hands-free: it counts reps, ends sets when you tap Done, times your rest, coaches form by voice and vibration, suggests next session's weights, and graphs your progress.
 
 This is a rewrite of the app in `ez-codes-07/smart-bell`. The firmware is unchanged. The motion code is new: it no longer integrates acceleration, which is why the old rep counter drifted. See [docs/ALGORITHM.md](docs/ALGORITHM.md).
 
@@ -15,7 +15,7 @@ This is a rewrite of the app in `ez-codes-07/smart-bell`. The firmware is unchan
 **Workouts**
 - Built-in workouts: Arm day, Upper body, Full body starter, and Elbow mobility (rehab). You can also build your own: exercises, sets, reps, weight and rest.
 - **Hands-free sets:**
-  - the first rep starts the set, and a pause ends it
+  - the first rep starts the set, and tapping Done ends it (no time limit between reps)
   - the rest timer starts automatically and calls out "10 seconds" before the end
   - the next set starts when you start lifting
   - rest is measured from the end of one set to the first rep of the next

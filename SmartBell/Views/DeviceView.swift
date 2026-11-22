@@ -8,7 +8,6 @@ struct DeviceView: View {
     @AppStorage(Coach.speakCuesKey) private var speakCues = true
     @AppStorage(Coach.hapticsKey) private var haptics = true
     @AppStorage(Coach.speakGuidanceKey) private var speakGuidance = true
-    @AppStorage(WorkoutController.autoFinishKey) private var autoFinish = true
     @State private var importing = false
     @State private var report: ReplayReport?
     @State private var replayError = false
@@ -81,7 +80,6 @@ struct DeviceView: View {
                     Toggle("Speak form cues", isOn: $speakCues)
                     Toggle("Speak workout guidance and rest timer", isOn: $speakGuidance)
                     Toggle("Vibrate", isOn: $haptics)
-                    Toggle("Finish sets automatically after a pause", isOn: $autoFinish)
                 }
 
                 Section("How it works") {

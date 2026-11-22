@@ -152,7 +152,6 @@ final class AppModel: ObservableObject {
                     if curlInUse { workout?.sensorResult(r) }
                 }
             }
-            if curlInUse && engine!.isInRep { workout?.noteMovement() }
         }
         // taught exercise: its own engine with the learned profile
         if let ex = current, !ex.sensorBuiltIn, let profile = profiles[ex.id] {
@@ -166,7 +165,6 @@ final class AppModel: ObservableObject {
                 case .result(let r): workout?.sensorResult(r)
                 }
             }
-            if profileEngine!.isInRep { workout?.noteMovement() }
         } else if profileEngine != nil {
             profileEngine = nil
         }
