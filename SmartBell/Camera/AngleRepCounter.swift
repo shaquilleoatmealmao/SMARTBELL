@@ -1,3 +1,13 @@
+//
+//  AngleRepCounter.swift
+//  SmartBell — Camera
+//
+//  Counts reps from a single camera-measured joint angle (from PoseFrame.angle).
+//  Used by WorkoutController when an exercise is set to camera counting, and by
+//  CameraLab on the Camera tab. Rest/work angles per exercise come from
+//  CameraRepConfig in ExerciseLibrary.
+//
+
 import Foundation
 
 /// Rep counter for any joint angle from the camera. Same idea as the SmartBell RepDetector:
@@ -8,19 +18,21 @@ import Foundation
 ///
 /// Works for movements in either direction (a curl increases the angle, a press decreases it).
 struct AngleRepCounter {
+    /// counted(total, rep) for a full rep; partial(rep) when the peak stayed below 0.8.
     enum Event { case counted(Int, CameraRep), partial(CameraRep) }
 
     let config: CameraRepConfig
     private(set) var count = 0
-    private(set) var smoothed: Double?
+    private(set) var smoothed: Double?       // filtered angle, deg (nil = no tracking)
     private(set) var inRep = false
-    private var lastTime: TimeInterval?
-    private var startT = 0.0
-    private var peakP = 0.0
+    private var lastTime: TimeInterval?      // time of the last valid measurement
+    private var startT = 0.0                 // when p crossed 0.35
+    private var peakP = 0.0                  // highest progress in this rep
     private var peakT = 0.0
 
     init(config: CameraRepConfig) { self.config = config }
 
+    /// 0 at the rest angle, 1 at the work angle (can go outside 0...1).
     var progress: Double {
         guard let a = smoothed else { return 0 }
         return (a - config.restDeg) / (config.workDeg - config.restDeg)
@@ -48,8 +60,9 @@ struct AngleRepCounter {
             return nil
         }
         if p > peakP { peakP = p; peakT = t }
-        if t - startT > 15 { inRep = false; return nil }
-        guard p < 0.25 else { return nil }
+        if t - startT > 15 { inRep = false; return nil }  // held too long: not a rep
+        guard p < 0.25 else { return nil }                 // still in the rep
+        // Back below 0.25: the rep is over.
 
         inRep = false
         // The thresholds cut off the slow ends of the movement; for a smooth rep the 35%->peak and

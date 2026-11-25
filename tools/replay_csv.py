@@ -18,6 +18,8 @@ import sys
 from smartbell_motion import Calibration, Calibrator, MotionEngine, Params
 
 
+# Read a recording: optional '# calibration: {json}' line plus ax..dt_s rows.
+# Returns (Calibration or None, list of rows).
 def load(path):
     cal, rows = None, []
     with open(path) as fh:
@@ -44,6 +46,8 @@ def load(path):
     return cal, rows
 
 
+# For files without a calibration line: find the first 2 s still, then use the
+# following curls as calibration (see the module docstring).
 def auto_calibrate(rows):
     c = Calibrator()
     k = 0
@@ -67,6 +71,8 @@ def auto_calibrate(rows):
     return cal, end
 
 
+# Parse args, calibrate (from the file or automatically), replay, print each rep,
+# optionally plot the forearm angle.
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("csv")

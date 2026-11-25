@@ -1,3 +1,18 @@
+//
+//  BLEManager.swift
+//  SmartBell — Sensor
+//
+//  Finds, connects to and streams data from the SmartBell ESP32 over Bluetooth LE.
+//  Every complete CSV line becomes a SensorSample delivered through `onSample`
+//  (AppModel sets that and forwards samples to the motion engine / recorder).
+//
+//  Connection flow:
+//    Bluetooth on → reconnectToLast()  (or user taps Scan → scan() → connect())
+//    didConnect → discoverServices → discoverCharacteristics → setNotifyValue(true)
+//    didUpdateValueFor → handle(data) → buffer until '\n' → SensorSample.parse → onSample
+//  If the link drops while the user still wants a connection, it reconnects automatically.
+//
+
 import Foundation
 import CoreBluetooth
 
@@ -11,23 +26,25 @@ import CoreBluetooth
 final class BLEManager: NSObject, ObservableObject {
     static let serviceUUID = CBUUID(string: "7b7e0001-9d8b-4f2a-a2b0-5c4e1a000001")
     static let dataUUID = CBUUID(string: "7b7e0002-9d8b-4f2a-a2b0-5c4e1a000001")
-    private static let lastDeviceKey = "lastSmartBellPeripheral"
+    private static let lastDeviceKey = "lastSmartBellPeripheral"  // UserDefaults key: last device's UUID
 
+    /// Connection state shown in the UI (see statusText).
     enum Status: Equatable {
         case bluetoothOff, unauthorized, unsupported, idle, scanning, connecting, connected, disconnected
     }
 
     @Published private(set) var status = Status.idle
-    @Published private(set) var discovered: [CBPeripheral] = []
+    @Published private(set) var discovered: [CBPeripheral] = []   // devices found by the current scan
     @Published private(set) var deviceName: String?
-    @Published private(set) var malformedLines = 0
+    @Published private(set) var malformedLines = 0                // lines that failed to parse (diagnostic)
 
+    /// Called on the main thread for every valid sample.
     var onSample: ((SensorSample) -> Void)?
 
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
-    private var buffer = Data()
-    private var wantsConnection = false
+    private var buffer = Data()            // bytes received but not yet ended by '\n'
+    private var wantsConnection = false    // true between connect() and disconnect(); drives auto-reconnect
 
     override init() {
         super.init()
@@ -48,6 +65,7 @@ final class BLEManager: NSObject, ObservableObject {
         }
     }
 
+    /// Look for advertising SmartBells (filtered by service UUID).
     func scan() {
         guard central.state == .poweredOn else { return }
         discovered.removeAll()
@@ -62,6 +80,7 @@ final class BLEManager: NSObject, ObservableObject {
         }
     }
 
+    /// Connect to a device and remember it for automatic reconnection next launch.
     func connect(_ p: CBPeripheral) {
         central.stopScan()
         wantsConnection = true
@@ -73,6 +92,7 @@ final class BLEManager: NSObject, ObservableObject {
         central.connect(p, options: nil)
     }
 
+    /// User-requested disconnect (turns off auto-reconnect).
     func disconnect() {
         wantsConnection = false
         if let peripheral { central.cancelPeripheralConnection(peripheral) }
@@ -88,6 +108,9 @@ final class BLEManager: NSObject, ObservableObject {
         connect(p)
     }
 
+    /// Reassemble lines from notification payloads. One notification may hold part of a
+    /// line or several lines, so append to the buffer and cut at every '\n' (0x0A).
+    /// Skips blank lines and the "ax,ay,…" header.
     private func handle(_ data: Data) {
         buffer.append(data)
         while let nl = buffer.firstIndex(of: 0x0A) {
@@ -98,10 +121,14 @@ final class BLEManager: NSObject, ObservableObject {
             if trimmed.isEmpty || trimmed.hasPrefix("ax") { continue }
             if let s = SensorSample.parse(Substring(trimmed)) { onSample?(s) } else { malformedLines += 1 }
         }
+        // No newline in 512 bytes means the stream is garbage; drop it rather than grow forever.
         if buffer.count > 512 { buffer.removeAll(keepingCapacity: true) }
     }
 }
 
+// MARK: - CBCentralManagerDelegate
+// CoreBluetooth calls these on the main queue (we passed `queue: .main`), so
+// MainActor.assumeIsolated is safe and lets us touch @Published state directly.
 extension BLEManager: CBCentralManagerDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         MainActor.assumeIsolated {
@@ -159,6 +186,8 @@ extension BLEManager: CBCentralManagerDelegate {
     }
 }
 
+// MARK: - CBPeripheralDelegate
+// GATT discovery chain: service → characteristic → enable notifications → receive data.
 extension BLEManager: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         MainActor.assumeIsolated {

@@ -1,3 +1,19 @@
+//
+//  AppModel.swift
+//  SmartBell — App
+//
+//  The app's central controller (one instance, owned by SmartBellApp). It:
+//    • owns the data sources (BLEManager, DemoSensor, PoseCamera) and services
+//      (Recorder, WorkoutStore, Coach, CameraLab)
+//    • routes every sensor sample to whichever mode is active:
+//        calibrating → Calibrator,  teaching → ExerciseTeacher,
+//        otherwise   → MotionEngine (curls) and/or a profile engine (taught exercise)
+//    • forwards rep events to the active WorkoutController
+//    • publishes a 30 Hz LiveState snapshot for the UI
+//    • saves the calibration and taught profiles in UserDefaults
+//    • replays recorded CSVs through a fresh engine
+//
+
 import Foundation
 import Combine
 import UIKit
@@ -22,6 +38,7 @@ struct LiveState {
 /// SmartBell readiness for one exercise.
 enum SensorStatus: Equatable { case ready, needsCalibration, needsTeaching, noData }
 
+/// Progress of "Teach SmartBell", shown by TeachView. nil in AppModel = not teaching.
 enum TeachStep: Equatable {
     case hold(progress: Double)
     case reps(seconds: Double, level: Double, canFinish: Bool)
@@ -29,6 +46,7 @@ enum TeachStep: Equatable {
     case failed(String)
 }
 
+/// Progress of the 15 s calibration, shown by CalibrationView. nil = not calibrating.
 enum CalibrationStep: Equatable {
     case hang(progress: Double)
     case curls(count: Int, angle: Double)
@@ -36,6 +54,7 @@ enum CalibrationStep: Equatable {
     case failed(String)
 }
 
+/// What replay(_:) found in a recorded CSV (shown on the Device tab).
 struct ReplayReport: Identifiable {
     let id = UUID()
     var fileName: String
@@ -48,6 +67,7 @@ struct ReplayReport: Identifiable {
 
 @MainActor
 final class AppModel: ObservableObject {
+    /// Where samples are currently coming from.
     enum Source { case none, sensor, demo }
 
     let ble = BLEManager()
@@ -59,31 +79,32 @@ final class AppModel: ObservableObject {
     let lab = CameraLab()
 
     @Published private(set) var source = Source.none
-    @Published private(set) var calibration: Calibration?
+    @Published private(set) var calibration: Calibration?          // nil until the user calibrates
     @Published private(set) var live = LiveState()
     @Published private(set) var calibrationStep: CalibrationStep?
-    @Published private(set) var lastRep: RepResult?
-    @Published private(set) var workout: WorkoutController?
-    @Published private(set) var profiles: [String: MotionProfile] = [:]
+    @Published private(set) var lastRep: RepResult?                // most recent analysed curl
+    @Published private(set) var workout: WorkoutController?        // non-nil while a workout is open
+    @Published private(set) var profiles: [String: MotionProfile] = [:]  // taught exercises, by exercise id
     @Published private(set) var teachStep: TeachStep?
     @Published private(set) var teachingExercise: Exercise?
 
-    private var engine: MotionEngine?
+    private var engine: MotionEngine?            // curl engine; always running once calibrated
     private var profileEngine: MotionEngine?     // runs the taught exercise in the current workout
     private var teacher: ExerciseTeacher?
     private static let profilesKey = "exerciseProfiles.v1"
-    private var calibrator: Calibrator?
-    private var partialCalibration: Calibration?
-    private var calibrationStart = Date()
-    private var snapshotTimer: Timer?
-    private var samplesSinceSnapshot = 0
+    private var calibrator: Calibrator?          // non-nil while calibrating
+    private var partialCalibration: Calibration? // result of calibration step 1 (hang)
+    private var calibrationStart = Date()        // for the 90 s timeout in step 2
+    private var snapshotTimer: Timer?            // fires snapshot() at 30 Hz
+    private var samplesSinceSnapshot = 0         // for the measured sample rate
     private var lastSnapshot = Date()
-    private var lastSampleDate: Date?
-    private var history: [Double] = []
+    private var lastSampleDate: Date?            // to detect "no data"
+    private var history: [Double] = []           // recent β values for the live chart (180 = 6 s at 30 Hz)
     private var cancellables: Set<AnyCancellable> = []
     private static let calibrationKey = "calibration.v2"
 
     init() {
+        // Restore the saved calibration and taught profiles from the last launch.
         if let data = UserDefaults.standard.data(forKey: Self.calibrationKey),
            let cal = try? JSONDecoder().decode(Calibration.self, from: data) {
             calibration = cal
@@ -93,6 +114,7 @@ final class AppModel: ObservableObject {
            let p = try? JSONDecoder().decode([String: MotionProfile].self, from: data) {
             profiles = p
         }
+        // Wire every data source into the pipeline.
         ble.onSample = { [weak self] s in self?.handle(s, from: .sensor) }
         demo.onSample = { [weak self] s in self?.handle(s, from: .demo) }
         camera.onFrame = { [weak self] f in MainActor.assumeIsolated { self?.handlePose(f) } }
@@ -107,6 +129,7 @@ final class AppModel: ObservableObject {
     }
 
     var isDemo: Bool { demo.isRunning }
+    /// True if a sample arrived in the last second (from either source).
     var hasData: Bool { live.secondsSinceSample < 1.0 }
 
     // MARK: - sources
@@ -124,6 +147,9 @@ final class AppModel: ObservableObject {
 
     // MARK: - sample pipeline
 
+    /// Every sample (100 Hz) from the ESP32 or the demo comes through here.
+    /// Calibration and teaching each take the stream exclusively; otherwise the curl
+    /// engine always runs and the profile engine runs when a taught exercise is active.
     private func handle(_ s: SensorSample, from origin: Source) {
         if origin == .sensor && demo.isRunning { return } // demo has priority while it's on
         if source != origin { source = origin }
@@ -139,6 +165,8 @@ final class AppModel: ObservableObject {
             handleTeaching(s)
             return
         }
+        // Only report curl reps to the workout if the current exercise is a curl
+        // (the curl engine keeps running for the live display either way).
         let current = workout?.exercise
         let curlInUse = current?.sensorBuiltIn ?? false
         if engine != nil {
@@ -155,6 +183,7 @@ final class AppModel: ObservableObject {
         }
         // taught exercise: its own engine with the learned profile
         if let ex = current, !ex.sensorBuiltIn, let profile = profiles[ex.id] {
+            // (Re)create the engine when the exercise changes or its profile is re-taught.
             if profileEngine?.profile != profile {
                 profileEngine = MotionEngine(calibration: calibration ?? Calibration(), profile: profile)
             }
@@ -186,13 +215,15 @@ final class AppModel: ObservableObject {
         workout?.cameraFrame(f)
     }
 
+    /// 30 Hz: copy engine state into `live` for SwiftUI. Publishing at 100 Hz would
+    /// re-render the views far more often than the screen can show.
     private func snapshot() {
         let now = Date()
         let elapsed = now.timeIntervalSince(lastSnapshot)
         var l = live
         if elapsed > 0 {
             let rate = Double(samplesSinceSnapshot) / elapsed
-            l.sampleRate = l.sampleRate * 0.8 + rate * 0.2
+            l.sampleRate = l.sampleRate * 0.8 + rate * 0.2   // smoothed samples/s (should read ~100)
         }
         samplesSinceSnapshot = 0
         lastSnapshot = now
@@ -223,6 +254,8 @@ final class AppModel: ObservableObject {
 
     // MARK: - calibration
 
+    /// Begin the two-step calibration. While `calibrator` is set, handle() sends every
+    /// sample to handleCalibration() instead of the engines.
     func startCalibration() {
         calibrator = Calibrator()
         partialCalibration = nil
@@ -243,6 +276,9 @@ final class AppModel: ObservableObject {
         completeCalibration(c, base)
     }
 
+    /// Drive the Calibrator and update `calibrationStep` for the UI. Steps:
+    /// hang (until 2 s still) → curls (until 3 curls and arm back down, or 90 s timeout) → done/failed.
+    /// The step is only re-published when it changes visibly, to avoid 100 Hz re-renders.
     private func handleCalibration(_ s: SensorSample) {
         guard calibrator != nil else { return }
         switch calibrationStep {
@@ -275,6 +311,8 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Learn hinge/range from the recorded curls, then save the calibration and
+    /// rebuild the curl engine with it.
     private func completeCalibration(_ c: Calibrator, _ base: Calibration) {
         calibrator = nil
         guard let cal = c.finishCurls(base) else {
@@ -296,6 +334,9 @@ final class AppModel: ObservableObject {
     // MARK: - workouts
 
 
+    /// Open a workout. `sensorStatus` is passed as a closure so the controller can ask
+    /// "is SmartBell ready for this exercise?" at each exercise change. The session is
+    /// saved to the store when the workout finishes (if any set was logged).
     func startWorkout(_ template: WorkoutTemplate, unit: WeightUnit) {
         guard !template.items.isEmpty else { return }
         let w = WorkoutController(template: template, unit: unit, isDemo: isDemo, coach: coach, store: store,
@@ -313,6 +354,7 @@ final class AppModel: ObservableObject {
 
     /// Quick start: one exercise, three sets.
     func quickStart(_ exercise: Exercise, unit: WeightUnit) {
+        // Weight: the store's progression suggestion, else a light default (15 lb / 7 kg).
         let w = store.suggestedWeight(exercise.id, unit: unit) ?? (exercise.usesWeight ? (unit == .lb ? 15 : 7) : 0)
         let t = WorkoutTemplate(name: exercise.name, items: [
             PlannedExercise(exerciseId: exercise.id, sets: 3, reps: 10, weight: w, restSeconds: 90)])
@@ -331,6 +373,8 @@ final class AppModel: ObservableObject {
 
     // MARK: - teaching SmartBell an exercise
 
+    /// Begin teaching `ex`. Uses the curl calibration (forearm axis, bias, g) as the base;
+    /// while `teacher` is set, handle() routes samples to handleTeaching().
     func startTeaching(_ ex: Exercise) {
         teacher = ExerciseTeacher(exerciseId: ex.id, base: calibration ?? Calibration())
         teachingExercise = ex
@@ -364,6 +408,8 @@ final class AppModel: ObservableObject {
         guard teacher != nil else { return }
         teacher!.push(s)
         let t = teacher!
+        // Round the displayed values so teachStep only changes (and the UI only redraws)
+        // a few times per second.
         let step: TeachStep
         switch t.phase {
         case .hold: step = .hold(progress: (t.holdProgress * 20).rounded() / 20)
@@ -385,6 +431,7 @@ final class AppModel: ObservableObject {
         profiles[p.exerciseId] = p
         saveProfiles()
         teachStep = .done(p)
+        // Taught mid-workout for the current exercise: switch that exercise to sensor counting.
         if let w = workout, w.exercise?.id == p.exerciseId { w.setSource(.sensor) }
     }
 
@@ -402,6 +449,7 @@ final class AppModel: ObservableObject {
     func replay(_ url: URL) -> ReplayReport? {
         guard let loaded = Recorder.load(url), !loaded.samples.isEmpty else { return nil }
         let recordedCal = loaded.calibration, samples = loaded.samples
+        // Prefer the calibration saved inside the recording so the replay matches what the app saw.
         guard let cal = recordedCal ?? calibration else { return nil }
         var e = MotionEngine(calibration: cal)
         var reps: [RepResult] = []
@@ -410,7 +458,7 @@ final class AppModel: ObservableObject {
         for s in samples {
             for ev in e.push(s) { if case .result(let r) = ev { reps.append(r) } }
             t += s.dt
-            if t >= nextAngle { angles.append(e.beta); nextAngle += 0.05 }
+            if t >= nextAngle { angles.append(e.beta); nextAngle += 0.05 }  // keep 20 Hz for the plot
         }
         return ReplayReport(fileName: url.lastPathComponent, duration: t, samples: samples.count,
                             usedRecordedCalibration: recordedCal != nil, reps: reps, angles: angles)

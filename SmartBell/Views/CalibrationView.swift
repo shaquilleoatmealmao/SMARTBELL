@@ -1,5 +1,15 @@
+//
+//  CalibrationView.swift
+//  SmartBell — Views
+//
+//  The calibration sheet. Purely a display of AppModel.calibrationStep:
+//  step 1 (hang still) → step 2 (3 slow curls) → done / failed. All logic is in
+//  AppModel.handleCalibration and Motion/Calibrator.swift.
+//
+
 import SwiftUI
 
+/// Sheet shown while calibrating (presented by RootView or the workout screen).
 struct CalibrationView: View {
     @EnvironmentObject var model: AppModel
 
@@ -11,6 +21,7 @@ struct CalibrationView: View {
                     step(number: 1, title: "Let your arm hang",
                          text: "Hold the dumbbell, arm straight down by your side, relaxed. Stay still for 2 seconds.")
                     ProgressRing(progress: progress, label: progress > 0 ? "Hold still…" : "Waiting for stillness")
+                // Step 2: one tick per detected curl, plus the live forearm angle.
                 case .curls(let count, let angle)?:
                     step(number: 2, title: "Do 3 slow curls",
                          text: "Full range: all the way up, all the way down. About 2 seconds up and 2 seconds down.")
@@ -23,6 +34,7 @@ struct CalibrationView: View {
                     }
                     Text("\(Int(angle))°").font(.system(size: 54, weight: .bold, design: .rounded)).monospacedDigit()
                     Text("forearm angle").font(.caption).foregroundStyle(.secondary)
+                    // Two clear curls are enough to calibrate; let the user stop early.
                     if count >= 2 {
                         Button("Finish with \(count) curls") { model.finishCalibrationNow() }
                     }
@@ -48,6 +60,7 @@ struct CalibrationView: View {
                     EmptyView()
                 }
                 Spacer()
+                // Warn if the stream stops (e.g. ESP32 lost power).
                 if !model.hasData {
                     Label("No sensor data. Check the connection.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.red)
@@ -66,6 +79,7 @@ struct CalibrationView: View {
         }
     }
 
+    /// Step heading: "Step n of 2", title and instructions.
     private func step(number: Int, title: String, text: String) -> some View {
         VStack(spacing: 8) {
             Text("Step \(number) of 2").font(.subheadline.bold()).foregroundStyle(.secondary)
@@ -75,6 +89,7 @@ struct CalibrationView: View {
     }
 }
 
+/// Circular progress (0...1) with a label inside. Used for the hold-still step.
 struct ProgressRing: View {
     var progress: Double
     var label: String

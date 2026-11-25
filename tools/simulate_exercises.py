@@ -22,11 +22,13 @@ G = 9.80665
 FS = 100.0
 
 
+# minimum-jerk ease 0..1 (zero velocity and acceleration at both ends)
 def smooth(x):
     x = min(max(x, 0.0), 1.0)
     return x * x * x * (10 - 15 * x + 6 * x * x)
 
 
+# Script of rep progress 0..1 over time: hold still, then the reps with rests between.
 def rep_progress(reps, hold=1.5, rest_between=0.8):
     """Per-sample progress 0..1 (and labels). reps: list of (out_s, hold_s, back_s, depth)."""
     prog, t = [], 0.0
@@ -47,6 +49,7 @@ DOWN = R.from_matrix(np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]]).T)   # forear
 UP = R.from_rotvec([math.pi, 0, 0]) * DOWN                               # forearm pointing up
 
 
+# Kinematics per exercise: progress p (0..1) -> forearm orientation + sensor position.
 def kin_squat(p):       # dumbbells at sides, body goes down 35 cm, forearm hangs (slight swing)
     return R.from_rotvec([-0.08 * p, 0, 0]) * DOWN, np.array([0, 0.03 * p, -0.35 * p])
 
@@ -72,6 +75,7 @@ EXERCISES = {"squat": kin_squat, "press": kin_press, "lateral raise": kin_latera
              "row": kin_row, "push-up": kin_pushup}
 
 
+# Turn a progress script + kinematics into noisy IMU rows (bias, noise, scale error, drops).
 def sensor_rows(prog, kin, seed, bias=(2.0, -1.5, 1.0), drop=0.01):
     rng = np.random.default_rng(seed)
     mount = R.from_rotvec(rng.normal(size=3) * 1.2)
@@ -100,6 +104,7 @@ def sensor_rows(prog, kin, seed, bias=(2.0, -1.5, 1.0), drop=0.01):
     return rows
 
 
+# Teach on the first part, count the set, and report whether all full reps were counted.
 def run(name, seed, verbose=False):
     kin = EXERCISES[name]
     teach_reps = [(1.2, 0.3, 1.4, 1.0)] * 3

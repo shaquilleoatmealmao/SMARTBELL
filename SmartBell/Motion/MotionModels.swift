@@ -1,10 +1,24 @@
+//
+//  MotionModels.swift
+//  SmartBell — Motion
+//
+//  Shared data types and tuning constants for the motion pipeline:
+//    • MotionParams  – every filter/stillness threshold in one place
+//    • Calibration   – what the 15 s calibration learns about the strap mounting
+//    • MotionFrame   – one processed sample (forearm angle, rates, hand direction)
+//    • FormIssue     – the form problems we can detect, with cue text and score penalty
+//    • RepResult     – everything measured about one finished rep
+//
+
 import Foundation
 
 // Mirrors tools/smartbell_motion.py. If you change a constant here, change it there too,
 // then re-run `python3 tools/evaluate.py --seeds 20` to check nothing regressed.
 
-let standardGravity = 9.80665
+let standardGravity = 9.80665  // m/s², used until calibration measures this sensor's own g
 
+/// Tuning knobs for GravityTracker / MotionEngine. Defaults were chosen against
+/// the simulator (tools/evaluate.py), not yet against labeled real recordings.
 struct MotionParams {
     var accelLowPassHz = 8.0      // low-pass on accel before it is used as a gravity reference
     var gainMotion = 1.5          // 1/s: how fast accel corrects the up-vector while moving
@@ -38,7 +52,13 @@ struct Calibration: Codable, Equatable {
     var generic: Bool? = nil
     var isGeneric: Bool { generic == true }
 
+    // Rep-detector thresholds, all expressed as fractions of the user's own range of
+    // motion (ROM) so they work for any arm length, mounting or flexibility.
+    // ROM is floored at 40° so a sloppy calibration can't make thresholds collapse together.
     var rom: Double { max(topDeg - bottomDeg, 40.0) }
+    // startDeg: crossing upward = a rep has begun. topThresholdDeg: the peak must pass this
+    // for the rep to count. returnDeg: crossing downward = the rep is over (counted here).
+    // returnDeg < startDeg gives hysteresis, so noise near one threshold can't double-count.
     var startDeg: Double { bottomDeg + 0.30 * rom }
     var topThresholdDeg: Double { bottomDeg + 0.70 * rom }
     var returnDeg: Double { bottomDeg + 0.22 * rom }
@@ -54,10 +74,12 @@ struct MotionFrame {
     var linAcc: Double      // m/s^2, elbow/body acceleration (swinging)
 }
 
+/// A form problem detected on one rep (see RepDetector.analyse for the thresholds).
 enum FormIssue: String, Codable, CaseIterable, Identifiable {
     case swing, elbow, partial, shortTop, shortBottom, fastDown, fastUp, twist, sway
     var id: String { rawValue }
 
+    /// Lower number = more important. Only the highest-priority issue is spoken after a rep.
     var priority: Int {
         switch self {
         case .swing: 1
@@ -71,6 +93,7 @@ enum FormIssue: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Points subtracted from the rep's 100-point form score.
     var penalty: Int {
         switch self {
         case .swing: 30
@@ -115,6 +138,7 @@ enum FormIssue: String, Codable, CaseIterable, Identifiable {
 
     func cueText(generic: Bool) -> String { generic ? genericCue : cue }
 
+    /// Name of the issue, shown in history and session summaries.
     var label: String {
         switch self {
         case .swing: "Swinging"
@@ -130,15 +154,17 @@ enum FormIssue: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Measurements and form verdict for one rep (counted or partial). Saved with the workout.
+/// For curls, angles are degrees of forearm angle; for taught exercises they are % of range.
 struct RepResult: Codable, Identifiable, Equatable {
     var id = UUID()
-    var index: Int
-    var counted: Bool
-    var startT: Double
-    var peakT: Double
-    var endT: Double
-    var bottomDeg: Double
-    var topDeg: Double
+    var index: Int                  // 1-based position in the set
+    var counted: Bool               // false = partial rep (peak never reached the count threshold)
+    var startT: Double              // seconds (sensor clock) when the rep began
+    var peakT: Double               // ...when it reached its highest point
+    var endT: Double                // ...when it finished
+    var bottomDeg: Double           // lowest angle at the start of the rep
+    var topDeg: Double              // highest angle reached
     var concentricSeconds: Double   // lift time (bottom band -> top band)
     var eccentricSeconds: Double    // lower time (top band -> bottom band)
     var peakSpeedDps: Double

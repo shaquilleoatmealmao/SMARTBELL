@@ -1,3 +1,12 @@
+//
+//  ProgressTabView.swift
+//  SmartBell — Views
+//
+//  Progress tab: this week's strip, 12-week activity grid, weekly volume chart,
+//  per-exercise trend charts and personal records. All numbers come from
+//  FitnessStats, rebuilt from the store each time the view draws.
+//
+
 import SwiftUI
 import Charts
 
@@ -5,6 +14,7 @@ import Charts
 struct ProgressTabView: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("unit") private var unit = WeightUnit.lb
+    // Exercise chosen in the trends picker (nil = most recently trained).
     @State private var exerciseId: String?
 
     var body: some View {
@@ -97,6 +107,7 @@ struct ExerciseTrends: View {
             HStack {
                 Text(title).font(.subheadline.bold())
                 Spacer()
+                // Percentage change from the first session to the latest.
                 if let first = data.first?.1, let last = data.last?.1, data.count >= 2, first != 0 {
                     let change = (last - first) / abs(first) * 100
                     Text(String(format: "%+.0f%%", change)).font(.caption.bold())
@@ -113,6 +124,7 @@ struct ExerciseTrends: View {
         .padding(.vertical, 4)
     }
 
+    /// Y-axis range with 20% padding (at least 1), never below 0.
     private func autoDomain(_ ys: [Double]) -> ClosedRange<Double> {
         let lo = ys.min() ?? 0, hi = ys.max() ?? 1
         let pad = max((hi - lo) * 0.2, 1)
@@ -130,6 +142,7 @@ struct ActivityGrid: View {
             let cal = Calendar.current
             let today = cal.startOfDay(for: Date())
             let start = cal.date(byAdding: .day, value: -(weeks * 7 - 1), to: today) ?? today
+            // Cell size so 12 columns and 7 rows fit, with 3 pt gaps and room for labels.
             let cell = min((g.size.width - CGFloat(weeks - 1) * 3) / CGFloat(weeks), (g.size.height - 18) / 7)
             let maxReps = max(daily.values.max() ?? 1, 1)
             HStack(alignment: .top, spacing: 3) {
@@ -142,6 +155,7 @@ struct ActivityGrid: View {
                                 .fill(reps == 0 ? Color.secondary.opacity(0.15)
                                       : Color.green.opacity(0.35 + 0.65 * Double(reps) / Double(maxReps)))
                                 .frame(width: cell, height: cell)
+                                // Days after today (end of the current week) are hidden.
                                 .opacity(day > today ? 0 : 1)
                         }
                     }

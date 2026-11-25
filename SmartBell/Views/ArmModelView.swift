@@ -1,3 +1,13 @@
+//
+//  ArmModelView.swift
+//  SmartBell — Views
+//
+//  Drawing components for curl feedback:
+//    • ArmModelView – side and front stick-figure views of the arm, with the rep's hand path
+//    • ScoreRing    – circular 0–100 form-score badge
+//    • RepCard      – one-rep summary (score, main cue, lift/lower time, range)
+//
+
 import SwiftUI
 
 /// Live picture of the rep, built only from drift-free quantities:
@@ -8,8 +18,10 @@ struct ArmModelView: View {
     var hand: Vec3                 // (forward, side, up) unit forearm vector
     var path: [Vec3]               // current rep
     var ghost: [Vec3]              // previous rep
+    // Calibrated range, drawn as the green target arc in the side view.
     var bottomDeg: Double
     var topDeg: Double
+    // warning: draw the path and dumbbell in orange (last rep had a form issue).
     var warning: Bool = false
     var compact: Bool = false
 
@@ -21,6 +33,7 @@ struct ArmModelView: View {
         }
     }
 
+    /// One labelled drawing panel.
     private func panel(title: String, front: Bool) -> some View {
         VStack(spacing: 4) {
             Canvas { ctx, size in
@@ -31,12 +44,15 @@ struct ArmModelView: View {
         }
     }
 
+    /// Draw one view. Layout is proportional to the panel size; the elbow is the fixed pivot.
+    /// Side view uses the hand's (forward, up) components, front view uses (side, up).
     private func draw(ctx: GraphicsContext, size: CGSize, front: Bool) {
         let upper = min(size.height * 0.30, size.width * (front ? 0.45 : 0.32))
         let lower = upper * 1.05
         let elbow = CGPoint(x: front ? size.width / 2 : size.width * 0.38, y: size.height * 0.48)
         let shoulder = CGPoint(x: elbow.x, y: elbow.y - upper)
 
+        // Unit forearm vector → screen point at forearm length from the elbow (screen y grows down).
         func project(_ v: Vec3) -> CGPoint {
             let x = front ? v.y : v.x
             return CGPoint(x: elbow.x + CGFloat(x) * lower, y: elbow.y - CGFloat(v.z) * lower)
@@ -104,11 +120,13 @@ struct ScoreRing: View {
     var score: Int
     var size: CGFloat = 56
 
+    // Green ≥ 85, orange ≥ 60, red below.
     var color: Color { score >= 85 ? .green : score >= 60 ? .orange : .red }
 
     var body: some View {
         ZStack {
             Circle().stroke(color.opacity(0.2), lineWidth: size * 0.12)
+            // Arc length = score; rotated so it starts at 12 o'clock.
             Circle().trim(from: 0, to: CGFloat(score) / 100)
                 .stroke(color, style: StrokeStyle(lineWidth: size * 0.12, lineCap: .round))
                 .rotationEffect(.degrees(-90))
@@ -139,6 +157,7 @@ struct RepCard: View {
                 HStack(spacing: 12) {
                     metric("Lift", String(format: "%.1fs", rep.concentricSeconds))
                     metric("Lower", String(format: "%.1fs", rep.eccentricSeconds))
+                    // Taught exercises: peak as % of learned range. Curls: degrees moved.
                     metric("Range", rep.isGeneric ? "\(Int(rep.topDeg.rounded()))%" : "\(Int(rep.topDeg - rep.bottomDeg))°")
                 }
             }

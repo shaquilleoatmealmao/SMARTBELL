@@ -1,3 +1,15 @@
+//
+//  WorkoutPlayerView.swift
+//  SmartBell — Views
+//
+//  Full-screen workout UI, driven entirely by WorkoutController's state:
+//    header (progress dots, exercise, set n of m, tracking picker)
+//    tracking area (arm model / taught-exercise progress / camera preview)
+//    phase panel: ready (set weight & reps) → active (rep count, last-rep card) → rest (timer)
+//  When the workout finishes it shows SessionSummaryView. Also defines LastSetCard,
+//  ProgressBar and InfoCard, which other screens reuse.
+//
+
 import SwiftUI
 
 /// Full-screen guided workout. Hands-free with SmartBell or camera tracking.
@@ -5,6 +17,7 @@ struct WorkoutPlayerView: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject var workout: WorkoutController
     @ObservedObject var camera: PoseCamera
+    // Whether this view has started the camera (so it stops exactly what it started).
     @State private var cameraStarted = false
     @State private var confirmEnd = false
 
@@ -55,6 +68,7 @@ struct WorkoutPlayerView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
         }
+        // Calibration / teaching can be started mid-workout; their sheets show over this screen.
         .sheet(isPresented: Binding(get: { model.calibrationStep != nil }, set: { if !$0 { model.dismissCalibration() } })) {
             CalibrationView().environmentObject(model).interactiveDismissDisabled()
         }
@@ -67,6 +81,7 @@ struct WorkoutPlayerView: View {
         .onDisappear { if cameraStarted { camera.stop(); cameraStarted = false } }
     }
 
+    /// Run the camera only while the current exercise is counted by the camera.
     private func syncCamera() {
         let want = workout.source == .camera && workout.phase != .finished
         if want && !cameraStarted { camera.start(); cameraStarted = true }
@@ -78,6 +93,7 @@ struct WorkoutPlayerView: View {
     private var header: some View {
         VStack(spacing: 8) {
             HStack(spacing: 4) {
+                // One dot per exercise: green = done, accent = current, grey = to come.
                 ForEach(Array(workout.session.exercises.enumerated()), id: \.element.id) { i, e in
                     Capsule()
                         .fill(i < workout.exerciseIndex ? Color.green : i == workout.exerciseIndex ? Color.accentColor : Color.secondary.opacity(0.3))
@@ -93,6 +109,7 @@ struct WorkoutPlayerView: View {
                 Spacer()
                 if workout.session.isDemo { Text("DEMO").font(.caption.bold()).foregroundStyle(.orange) }
             }
+            // Tracking method can be changed between sets, not during one.
             if workout.phase != .active && workout.availableSources.count > 1 {
                 Picker("Tracking", selection: Binding(get: { workout.source }, set: { workout.setSource($0) })) {
                     ForEach(workout.availableSources) { Label($0.label, systemImage: $0.symbol).tag($0) }
@@ -128,6 +145,8 @@ struct WorkoutPlayerView: View {
         }
     }
 
+    /// SmartBell area: a prompt if it isn't ready, else the live arm model (curls)
+    /// or a % of range bar (taught exercises).
     @ViewBuilder private var sensorArea: some View {
         let ex = workout.exercise
         switch workout.sensorState {
@@ -146,6 +165,7 @@ struct WorkoutPlayerView: View {
             if ex?.sensorBuiltIn ?? true {
                 ArmModelView(hand: model.live.hand, path: model.live.currentPath, ghost: model.lastRep?.path ?? [],
                              bottomDeg: model.calibration?.bottomDeg ?? 8, topDeg: model.calibration?.topDeg ?? 140,
+                             // Orange when body/elbow acceleration is over 4 m/s² (same as the swing check).
                              warning: model.live.linearAcceleration > 4, compact: true)
                     .frame(height: 190)
             } else {
@@ -181,6 +201,7 @@ struct WorkoutPlayerView: View {
 
     // MARK: - phases
 
+    /// Before a set: adjust target reps and weight, see last session, start.
     private var readyPanel: some View {
         VStack(spacing: 14) {
             HStack(spacing: 24) {
@@ -215,6 +236,7 @@ struct WorkoutPlayerView: View {
         }
     }
 
+    /// During a set: big rep counter, ± for manual, feedback on the last rep, Done.
     private var activePanel: some View {
         VStack(spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
@@ -254,6 +276,7 @@ struct WorkoutPlayerView: View {
         }
     }
 
+    /// Between sets: countdown ring (orange in the last 10 s), what's next, and the last set.
     private var restPanel: some View {
         VStack(spacing: 16) {
             ZStack {
@@ -286,6 +309,7 @@ struct WorkoutPlayerView: View {
         }
     }
 
+    /// Countdown text, rounded up so it shows 0:01 rather than 0:00 until rest is really over.
     private func timeString(_ s: TimeInterval) -> String {
         let t = Int(s.rounded(.up))
         return String(format: "%d:%02d", t / 60, t % 60)
@@ -317,6 +341,7 @@ struct LastSetCard: View {
                 HStack(spacing: 6) {
                     ForEach([6.0, 7.0, 8.0, 9.0, 10.0], id: \.self) { r in
                         Button {
+                            // Tapping the selected RPE again clears it.
                             workout.setRPE(set.rpe == r ? nil : r)
                         } label: {
                             Text("\(Int(r))").font(.headline).frame(maxWidth: .infinity, minHeight: 36)
@@ -333,6 +358,7 @@ struct LastSetCard: View {
     }
 }
 
+/// Thin horizontal bar for a 0...1 value; turns green from 0.8 (the full-rep threshold).
 struct ProgressBar: View {
     var value: Double
 

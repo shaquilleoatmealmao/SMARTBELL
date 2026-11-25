@@ -29,6 +29,11 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+# Swift counterparts: Vec3.swift (vector helpers), MotionModels.swift (Params, Calibration,
+# Frame, RepResult), GravityTracker.swift, RepDetector.swift, MotionEngine.swift,
+# ExerciseProfile.swift (taught exercises), Calibrator.swift.
+
+# standard gravity (m/s^2) and degrees -> radians factor
 G0 = 9.80665
 DEG = math.pi / 180.0
 
@@ -42,6 +47,7 @@ def cross(a, b): return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 def norm(a): return math.sqrt(dot(a, a))
 
 
+# unit-length copy; a (near-)zero vector is returned unchanged so it never becomes NaN
 def normalized(a):
     n = norm(a)
     return a if n < 1e-12 else mul(a, 1.0 / n)
@@ -57,6 +63,7 @@ def rotate(v, rv):
     return add(add(mul(v, c), mul(cross(k, v), s)), mul(k, dot(k, v) * (1.0 - c)))
 
 
+# smoothing factor of a first-order RC low-pass: y += (x - y) * alpha
 def lpf_alpha(cutoff_hz, dt):
     rc = 1.0 / (2.0 * math.pi * cutoff_hz)
     return dt / (rc + dt)
@@ -95,6 +102,7 @@ class Calibration:
     generic: bool = False              # True for taught exercises: generic form rules, units = % of range
 
     @property
+    # sideways axis, perpendicular to both forearm and hinge
     def side(self):
         return normalized(cross(self.forearm, self.hinge))
 
@@ -141,6 +149,7 @@ class GravityTracker:
             self.reset()
         dt = min(max(dt, 0.001), 0.05)
 
+        # bias-corrected angular rate in rad/s
         w_raw = mul(gyro_dps, DEG)
         w = sub(w_raw, mul(self.bias, DEG))
 
@@ -153,6 +162,7 @@ class GravityTracker:
         self.prev_w = w
         a_in = sub(a, a_rot)
 
+        # first sample after (re)start: initialise filters, assume the accel points along gravity
         if self.u is None or self.a_lpf is None:
             self.a_lpf = a_in
             self.a_slow = a_in
@@ -163,6 +173,7 @@ class GravityTracker:
 
         k = lpf_alpha(p.accel_lpf_hz, dt)
         self.a_lpf = add(self.a_lpf, mul(sub(a_in, self.a_lpf), k))
+        # high-frequency shaking = raw reading minus its 8 Hz low-pass
         shake = norm(sub(a_in, self.a_lpf))
         # slow (1 Hz) copy: smooth translation without rotation (squat, press) shows up as a
         # difference between the 8 Hz and 1 Hz filtered acceleration
@@ -194,6 +205,7 @@ class GravityTracker:
 
         self.w = w
         self.a_corr = self.a_lpf
+        # what's left after removing gravity: body/elbow acceleration (used for the swing check)
         self.lin_acc = norm(sub(self.a_lpf, mul(self.u, self.g)))
 
 
@@ -235,6 +247,7 @@ class RepResult:
     curve: list  # 40-point normalised beta curve
 
 
+# Python version returns events as tuples: ('counted', n) and ('result', RepResult).
 BAND = 5.0  # deg; a phase starts/ends when the angle is within this of its extreme
 
 
@@ -487,14 +500,17 @@ class MotionEngine:
             self.ref = r0
         else:
             self.ref = rotate(self.ref, mul(tr.w, -d))
+        # keep the reference horizontal, then express the forearm in (forward, side, up)
         self.ref = normalized(sub(self.ref, mul(u, dot(self.ref, u))))
         lat = cross(u, self.ref)
         f = cal.forearm
         rx, ry, rz = dot(f, self.ref), dot(f, lat), dot(f, u)
         self.raw_hand = (rx, ry, rz)
         ch, sh = math.cos(self.heading), math.sin(self.heading)
+        # rotate about vertical by -heading so this rep's direction is +x
         self.hand = (rx * ch + ry * sh, -rx * sh + ry * ch, rz)
 
+        # wrist twist: gyro rate about the forearm, integrated within a rep, decays between reps
         if self.detector.state == RepDetector.IDLE:
             self.twist_deg *= math.exp(-d / self.p.wobble_decay_s)
         self.twist_deg += dot(w, cal.forearm) * d
@@ -584,6 +600,7 @@ class MotionProfile:
     template: list = field(default_factory=list)
     twist_ref: float = 8.0
 
+    # rep-detector settings in % units: range 0..100, generic form rules
     def detector_calibration(self, base: Calibration) -> Calibration:
         c = Calibration(**{**base.__dict__})
         c.bottom_deg, c.top_deg = 0.0, 100.0
@@ -638,12 +655,14 @@ def teach(rows, base: Calibration, hold_s: float = 1.5, exercise: str = "exercis
         vs.append(vm.v)
         ts.append(t)
         us.append(tr.u)
+    # start-position gravity direction: mean of u over the hold (skip the first 0.3 s while the filter settles)
     hold = [u for tt, u in zip(ts, us) if 0.3 <= tt <= hold_s]
     if not hold:
         return None, {"error": "no start position"}
     s0 = normalized(tuple(map(sum, zip(*hold))))
     after = [i for i, tt in enumerate(ts) if tt > hold_s]
 
+    # build up to one candidate profile per channel
     candidates = []
     # orientation: direction farthest from the start, averaged over the rep peaks
     ang = [math.degrees(math.acos(max(-1, min(1, dot(us[i], s0))))) for i in after]
@@ -673,6 +692,7 @@ def teach(rows, base: Calibration, hold_s: float = 1.5, exercise: str = "exercis
     # pad with a moment of the last reading so a rep that just ended gets analysed
     padded = list(rows) + [list(rows[-1][:6]) + [0.01]] * 60
 
+    # run the full engine over the recording with candidate c; return counted reps
     def replay(c):
         eng = MotionEngine(base, p, c)
         out = []
@@ -682,6 +702,7 @@ def teach(rows, base: Calibration, hold_s: float = 1.5, exercise: str = "exercis
                     out.append(ev[1])
         return out
 
+    # score = reps found*10 - inconsistency of peaks/10, +15 for orientation (can't drift)
     best, info = None, {"tried": []}
     for c in candidates:
         res = replay(c)
@@ -733,9 +754,12 @@ class Calibrator:
         mean_a = mul(tuple(map(sum, zip(*self.hang_a))), 1.0 / n)
         mean_g = mul(tuple(map(sum, zip(*self.hang_g))), 1.0 / n)
         cal = Calibration()
+        # arm hanging: accel reads +g up, forearm points down -> forearm = -mean accel direction;
+        # still -> mean gyro is the bias; |mean accel| is this sensor's own g
         cal.forearm = mul(normalized(mean_a), -1.0)
         cal.gyro_bias = mean_g
         cal.gravity = sum(norm(a) for a in self.hang_a) / n
+        # placeholder hinge perpendicular to the forearm (real one is learned in finish_curls)
         cal.hinge = normalized(sub((1.0, 0.0, 0.0), mul(cal.forearm, cal.forearm[0])))
         if norm(cross(cal.forearm, (1.0, 0.0, 0.0))) < 0.3:
             cal.hinge = normalized(sub((0.0, 1.0, 0.0), mul(cal.forearm, cal.forearm[1])))
@@ -758,6 +782,7 @@ class Calibrator:
         v = (0.577, 0.577, 0.577)
         for _ in range(50):
             v = normalized((dot(c[0], v), dot(c[1], v), dot(c[2], v)))
+        # the hinge must be perpendicular to the forearm
         h = normalized(sub(v, mul(cal.forearm, dot(v, cal.forearm))))
         # sign: + hinge rate must mean the angle is increasing
         tr = GravityTracker(p, cal)
@@ -781,6 +806,7 @@ class Calibrator:
                     results.append(ev[1])
         if len(results) < 2:
             return cal, len(results)
+        # medians, so one odd calibration rep can't skew the user's range
         med = lambda xs: sorted(xs)[len(xs) // 2]
         cal.bottom_deg = med([r.bottom_deg for r in results])
         cal.top_deg = med([r.top_deg for r in results])

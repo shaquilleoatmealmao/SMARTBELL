@@ -1,3 +1,16 @@
+//
+//  DemoSensor.swift
+//  SmartBell — Sensor
+//
+//  A fake ESP32 for the simulator / demos. Produces the same SensorSample stream as
+//  BLEManager (100 Hz, via `onSample`) from a scripted arm motion, so every screen can
+//  be exercised without hardware. Mirrors tools/simulate.py.
+//
+//  How a sample is made: pose(at:) gives the arm's angles at time t → build the
+//  sensor's rotation and position in the world → gyro = rotation change between
+//  samples, accel = second difference of position + gravity → add bias, noise, scale error.
+//
+
 import Foundation
 
 /// Simulated forearm-mounted IMU so the app can be used without the ESP32.
@@ -9,8 +22,12 @@ import Foundation
 /// Everything it produces is labelled "Demo" in the UI.
 @MainActor
 final class DemoSensor {
+    /// calibration = 3 clean slow curls (for the calibration screen); workout = a looping
+    /// set that includes deliberately bad reps.
     enum Script { case calibration, workout }
 
+    /// One scripted rep. Times in seconds: con = lift, hold = pause at top, ecc = lower,
+    /// rest = pause at bottom. Angles in degrees of forearm angle β.
     struct DemoRep {
         var con = 1.2, hold = 0.3, ecc = 2.0, rest = 0.8
         var top = 140.0, bottom = 6.0
@@ -23,16 +40,16 @@ final class DemoSensor {
     var onSample: ((SensorSample) -> Void)?
 
     private var timer: Timer?
-    private var wallStart = Date()
-    private var simTime = 0.0
-    private let dt = 0.01
+    private var wallStart = Date()                 // real time the stream started
+    private var simTime = 0.0                      // simulated time of the last sample produced
+    private let dt = 0.01                          // 100 Hz, like the firmware
     private var script = Script.workout
-    private var lastRotation: Mat3?
-    private var lastPositions: [Vec3] = []
+    private var lastRotation: Mat3?                // previous sensor→world rotation (for the gyro)
+    private var lastPositions: [Vec3] = []         // last 3 positions (for the accel second difference)
     private var bias = Vec3(2.2, -1.6, 1.1)        // deg/s, deliberately not zero
-    private let mount = Mat3(axis: Vec3(0.3, 0.8, -0.5), angle: 1.9)
-    private let base = Mat3(r0: Vec3(1, 0, 0), r1: Vec3(0, -1, 0), r2: Vec3(0, 0, -1))
-    private let lever = 0.06
+    private let mount = Mat3(axis: Vec3(0.3, 0.8, -0.5), angle: 1.9)  // arbitrary box-on-strap rotation
+    private let base = Mat3(r0: Vec3(1, 0, 0), r1: Vec3(0, -1, 0), r2: Vec3(0, 0, -1))  // forearm z points down when β = 0
+    private let lever = 0.06                       // m from elbow to sensor
     private var rng = SystemRandomNumberGenerator()
 
     private let calibrationReps = [DemoRep(con: 1.6, hold: 0.4, ecc: 2.2, rest: 1.0, top: 138),
@@ -51,6 +68,7 @@ final class DemoSensor {
                                DemoRep(top: 165),                         // elbow forward
                                DemoRep(sway: 14)]                         // wobbles sideways
 
+    /// Start (or restart) streaming the given script from t = 0.
     func start(script: Script) {
         stop()
         self.script = script
@@ -88,6 +106,8 @@ final class DemoSensor {
 
     private struct Pose { var beta: Double; var twist: Double; var sway: Double; var elbow: Double }
 
+    /// Arm pose at time t: a still lead-in, then the script's reps in order
+    /// (the workout script loops with a 4 s break between passes).
     private func pose(at t: Double) -> Pose {
         let lead: Double
         let reps: [DemoRep]
@@ -109,6 +129,9 @@ final class DemoSensor {
         return Pose(beta: current, twist: 0, sway: 0, elbow: 0)
     }
 
+    /// Pose `s` seconds into one rep. `smooth` is a quintic ease-in/out (zero velocity and
+    /// acceleration at both ends), so the simulated arm starts and stops like a real one.
+    /// `env` is a half-sine envelope that fades twist/sway/tremor in and out over the rep.
     private func pose(_ rep: DemoRep, at s: Double, from start: Double) -> Pose {
         func smooth(_ x: Double) -> Double { let x = min(max(x, 0), 1); return x * x * x * (10 - 15 * x + 6 * x * x) }
         let active = rep.con + rep.hold + rep.ecc
@@ -127,6 +150,7 @@ final class DemoSensor {
 
     // MARK: - sensor model
 
+    /// Standard normal random number (Box–Muller transform).
     private func gaussian() -> Double {
         let u1 = Double.random(in: Double.ulpOfOne..<1, using: &rng)
         let u2 = Double.random(in: 0..<1, using: &rng)
@@ -141,6 +165,7 @@ final class DemoSensor {
             * base
             * Mat3(axis: Vec3(0, 0, 1), angle: p.twist * radPerDeg)
         let sensorToWorld = forearmToWorld * mount
+        // Sensor position = elbow (moved forward by `swing`) + lever arm along the forearm.
         let position = Vec3(0, p.elbow, 0) + forearmToWorld * Vec3(0, 0, lever)
 
         lastPositions.append(position)
@@ -148,11 +173,16 @@ final class DemoSensor {
         defer { lastRotation = sensorToWorld }
         guard let prev = lastRotation, lastPositions.count == 3 else { return nil }
 
+        // Ideal gyro: rotation from the previous sample to this one, in the sensor frame, per second.
         let rel = prev.transposed * sensorToWorld
         let gyro = rel.rotationVector * (degPerRad / dt)
+        // Ideal accelerometer: linear acceleration (finite difference) plus +g, rotated into
+        // the sensor frame. An accelerometer measures "specific force", so at rest it reads +g up.
         let acc = (lastPositions[2] - lastPositions[1] * 2 + lastPositions[0]) * (1 / (dt * dt))
         let specificForce = sensorToWorld.transposed * (acc + Vec3(0, 0, standardGravity))
 
+        // Real-sensor imperfections: bias random walk, gyro noise (0.5 °/s),
+        // 2% accelerometer scale error and accel noise (0.08 m/s²).
         bias = bias + Vec3(gaussian(), gaussian(), gaussian()) * 0.01
         let g = gyro + bias + Vec3(gaussian(), gaussian(), gaussian()) * 0.5
         let a = specificForce * 1.02 + Vec3(gaussian(), gaussian(), gaussian()) * 0.08

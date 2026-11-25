@@ -1,3 +1,13 @@
+//
+//  FitnessStats.swift
+//  SmartBell — Fitness
+//
+//  Read-only summaries computed from saved WorkoutSessions: this week's workouts,
+//  weekly streak, weekly volume, a daily activity map, per-exercise trend points
+//  (top weight, estimated 1RM, form score, speed, range, velocity loss) and records.
+//  Nothing is cached; views build a FitnessStats from the store when they draw.
+//
+
 import Foundation
 
 /// Aggregates for the Train and Progress tabs. Cheap enough to recompute on every render.
@@ -7,6 +17,7 @@ struct FitnessStats {
 
     init(sessions: [WorkoutSession]) { self.sessions = sessions }
 
+    /// First moment of the calendar week containing `d` (locale decides Sunday vs Monday).
     private func weekStart(_ d: Date) -> Date {
         cal.dateInterval(of: .weekOfYear, for: d)?.start ?? cal.startOfDay(for: d)
     }
@@ -49,6 +60,7 @@ struct FitnessStats {
         let from = cal.date(byAdding: .day, value: -days, to: cal.startOfDay(for: Date())) ?? Date()
         var d: [Date: Int] = [:]
         for s in sessions where s.start >= from {
+            // max(…, 1) so a workout with no logged reps still shows as an active day.
             d[cal.startOfDay(for: s.start), default: 0] += max(s.totalReps, 1)
         }
         return d
@@ -61,6 +73,8 @@ struct FitnessStats {
         return seen.compactMap { ExerciseLibrary.exercise($0) }
     }
 
+    /// One session's summary for one exercise (a point on the Progress charts).
+    /// Optional fields are nil when that session has no data for them (e.g. manual sets).
     struct ExercisePoint: Identifiable {
         var id: Date { date }
         var date: Date
@@ -95,6 +109,7 @@ struct FitnessStats {
 
     struct Record: Identifiable { var id: String { exercise.id }; var exercise: Exercise; var best1RM: Double?; var maxWeight: Double; var maxReps: Int }
 
+    /// Personal bests per trained exercise.
     func records(unit: WeightUnit) -> [Record] {
         trainedExercises.map { ex in
             let pts = points(for: ex.id, unit: unit)

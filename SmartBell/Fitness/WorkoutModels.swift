@@ -1,5 +1,16 @@
+//
+//  WorkoutModels.swift
+//  SmartBell — Fitness
+//
+//  The data saved for workouts, and the progressive-overload rule.
+//    Plans:   WorkoutTemplate → [PlannedExercise]   (what you intend to do)
+//    History: WorkoutSession → [ExerciseLog] → [SetLog] (→ per-rep RepResult / CameraRep)
+//  All types are Codable; WorkoutStore saves them as JSON.
+//
+
 import Foundation
 
+/// Weight unit. Each SetLog stores its own unit so history stays correct if the user switches.
 enum WeightUnit: String, Codable, CaseIterable, Identifiable {
     case lb, kg
     var id: String { rawValue }
@@ -11,23 +22,26 @@ enum WeightUnit: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// "15" or "17.5": at most one decimal place.
 func formatWeight(_ w: Double) -> String {
     w.formatted(.number.precision(.fractionLength(0...1)))
 }
 
 // MARK: - Plans
 
+/// One line of a workout plan: "3 × 10 bicep curls at 15, rest 90 s".
 struct PlannedExercise: Codable, Identifiable, Equatable {
     var id = UUID()
     var exerciseId: String
     var sets: Int
-    var reps: Int
+    var reps: Int                // target reps per set
     var weight: Double           // in the user's unit at the time the plan was made
     var restSeconds: Int
 
     var exercise: Exercise? { ExerciseLibrary.exercise(exerciseId) }
 }
 
+/// A named, reusable workout plan (built-in or user-made).
 struct WorkoutTemplate: Codable, Identifiable, Equatable {
     var id: String = UUID().uuidString
     var name: String
@@ -45,21 +59,22 @@ struct CameraRep: Codable, Equatable {
     var counted: Bool
 }
 
+/// One completed set, however it was counted.
 struct SetLog: Codable, Identifiable, Equatable {
     var id = UUID()
-    var reps: Int
-    var partials: Int = 0
+    var reps: Int                          // full reps
+    var partials: Int = 0                  // reps that didn't reach the full range
     var weight: Double
     var unit: WeightUnit
     var rpe: Double? = nil                 // rate of perceived exertion 6...10
     var start: Date
     var duration: TimeInterval
     var restBefore: TimeInterval? = nil    // measured rest since the previous set
-    var source: TrackingMode
+    var source: TrackingMode               // how the reps were counted
     var sensorReps: [RepResult] = []       // full SmartBell analysis, if tracked by the sensor
     var cameraReps: [CameraRep] = []
 
-    var volume: Double { Double(reps) * weight }
+    var volume: Double { Double(reps) * weight }   // reps × weight, in this set's unit
 
     /// Average form score (sensor sets only).
     var formScore: Int? {
@@ -108,10 +123,12 @@ struct SetLog: Codable, Identifiable, Equatable {
     /// Estimated one-rep max (Epley). Only meaningful for weighted sets of up to ~12 reps.
     var estimatedOneRepMax: Double? {
         guard weight > 0, reps > 0 else { return nil }
+        // Epley formula: 1RM ≈ w × (1 + reps / 30)
         return weight * (1 + Double(reps) / 30)
     }
 }
 
+/// All the sets done for one exercise in a session, plus the plan they were done against.
 struct ExerciseLog: Codable, Identifiable, Equatable {
     var id = UUID()
     var exerciseId: String
@@ -122,14 +139,15 @@ struct ExerciseLog: Codable, Identifiable, Equatable {
     var name: String { exercise?.name ?? exerciseId }
 }
 
+/// One workout as it actually happened. This is what History and Progress read.
 struct WorkoutSession: Codable, Identifiable, Equatable {
     var id = UUID()
     var name: String
-    var templateId: String?
+    var templateId: String?        // template it was started from, if any
     var start: Date
-    var end: Date?
+    var end: Date?                 // nil while in progress
     var exercises: [ExerciseLog]
-    var isDemo = false
+    var isDemo = false             // recorded with the demo sensor (labelled in the UI)
 
     var duration: TimeInterval { (end ?? Date()).timeIntervalSince(start) }
     var allSets: [SetLog] { exercises.flatMap(\.sets) }
@@ -153,7 +171,9 @@ struct WorkoutSession: Codable, Identifiable, Equatable {
 
 // MARK: - Progressive overload
 
+/// Simple progressive-overload rule of thumb (not personalised coaching).
 enum Progression {
+    /// Change to next session's weight; the associated value is the step size.
     enum Advice: Equatable { case increase(Double), keep, decrease(Double) }
 
     /// Suggest next session's weight for one exercise:
@@ -162,6 +182,7 @@ enum Progression {
     static func advice(for log: ExerciseLog) -> Advice {
         guard let ex = log.exercise, ex.usesWeight, !log.sets.isEmpty else { return .keep }
         let unit = log.sets[0].unit
+        // Increments are defined in lb; in kg use the converted step rounded to a whole kg (min 1).
         let step = unit == .lb ? ex.increment : max(1, (ex.increment * 0.45359237).rounded())
         let target = log.plan.reps
         let worstMiss = log.sets.map { target - $0.reps }.max() ?? 0
@@ -175,6 +196,7 @@ enum Progression {
         return .keep
     }
 
+    /// Last set's weight adjusted by the advice (never below 0).
     static func nextWeight(for log: ExerciseLog) -> Double? {
         guard let w = log.sets.last?.weight else { return nil }
         switch advice(for: log) {
@@ -184,6 +206,7 @@ enum Progression {
         }
     }
 
+    /// Advice as a sentence for the workout summary.
     static func text(for log: ExerciseLog) -> String? {
         guard let unit = log.sets.last?.unit, let next = nextWeight(for: log) else { return nil }
         switch advice(for: log) {

@@ -1,3 +1,13 @@
+//
+//  PoseGeometry.swift
+//  SmartBell — Camera
+//
+//  Joint names and 2D angle math for camera pose tracking. PoseFrame.angle(_:) turns a
+//  detected skeleton into the one angle an exercise is counted on (PoseMetric, defined
+//  in ExerciseLibrary). Angles are 2D (in the image plane), which is why each camera
+//  exercise tells the user to film side-on or facing.
+//
+
 import Foundation
 import CoreGraphics
 import Vision
@@ -8,6 +18,7 @@ enum Joint: String, CaseIterable, Hashable {
     case leftShoulder, rightShoulder, leftElbow, rightElbow, leftWrist, rightWrist
     case leftHip, rightHip, leftKnee, rightKnee, leftAnkle, rightAnkle
 
+    /// The matching Vision joint key.
     var visionName: VNHumanBodyPoseObservation.JointName {
         switch self {
         case .nose: .nose
@@ -44,8 +55,9 @@ struct PoseFrame {
     var imageSize: CGSize
     var time: TimeInterval
 
-    static let minConfidence: Float = 0.3
+    static let minConfidence: Float = 0.3   // ignore joints Vision is less sure about than this
 
+    /// Normalised point for a joint, or nil if missing / low confidence.
     func point(_ j: Joint) -> CGPoint? {
         guard let p = points[j], (confidence[j] ?? 0) >= PoseFrame.minConfidence else { return nil }
         return p
@@ -81,10 +93,13 @@ struct PoseFrame {
                 value = PoseFrame.angle(between: CGVector(dx: pts[1].x - pts[0].x, dy: pts[1].y - pts[0].y),
                                         and: CGVector(dx: 0, dy: 1))
             case .elbowFlexion, .kneeFlexion:
+                // Flexion = 180° − interior angle, so a straight limb reads 0°.
                 value = 180 - PoseFrame.interior(pts[0], pts[1], pts[2])
             case .armRaise:
+                // Angle at the shoulder between torso (hip) and upper arm (elbow): 0° = arm down.
                 value = PoseFrame.interior(pts[0], pts[1], pts[2])
             }
+            // Keep the side whose weakest joint is the most confident.
             if best == nil || conf > best!.conf { best = (value, conf) }
         }
         return best?.value
@@ -95,6 +110,7 @@ struct PoseFrame {
         angle(between: CGVector(dx: a.x - b.x, dy: a.y - b.y), and: CGVector(dx: c.x - b.x, dy: c.y - b.y))
     }
 
+    /// Unsigned angle between two vectors, degrees (0...180): acos(u·v / |u||v|).
     static func angle(between u: CGVector, and v: CGVector) -> Double {
         let nu = hypot(u.dx, u.dy), nv = hypot(v.dx, v.dy)
         guard nu > 1e-6, nv > 1e-6 else { return 0 }

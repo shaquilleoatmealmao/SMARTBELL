@@ -1,3 +1,14 @@
+//
+//  ExerciseLibrary.swift
+//  SmartBell — Fitness
+//
+//  The fixed catalogue of exercises and built-in workout templates. For each exercise:
+//  which tracking modes it supports (SmartBell / camera / manual, best first), the camera
+//  angle and thresholds used to count it, whether it uses weight, and its progression
+//  step. To add an exercise, add an entry to `all` (ids must stay stable: saved history
+//  and taught profiles refer to them).
+//
+
 import Foundation
 
 /// How a set of an exercise can be counted.
@@ -44,18 +55,20 @@ enum PoseMetric: String, Codable {
 /// Camera rep counting for one exercise: the rep goes from `restDeg` toward `workDeg` and back.
 /// `restDeg` may be larger than `workDeg` (e.g. a press starts bent and straightens).
 struct CameraRepConfig: Codable, Equatable {
-    var metric: PoseMetric
-    var restDeg: Double
-    var workDeg: Double
-    var setupHint: String
+    var metric: PoseMetric     // which joint angle to measure
+    var restDeg: Double        // angle at the start/end of a rep
+    var workDeg: Double        // angle at the far end of a full rep
+    var setupHint: String      // where to put the phone (shown to the user)
 }
 
+/// Grouping used in exercise pickers and stats.
 enum MuscleGroup: String, Codable, CaseIterable {
     case arms = "Arms", shoulders = "Shoulders", chest = "Chest", back = "Back", legs = "Legs", core = "Core"
 }
 
+/// One exercise in the catalogue.
 struct Exercise: Codable, Identifiable, Equatable, Hashable {
-    var id: String
+    var id: String                     // stable key, e.g. "bicep-curl"
     var name: String
     var group: MuscleGroup
     var tracking: [TrackingMode]       // supported, best first
@@ -63,6 +76,7 @@ struct Exercise: Codable, Identifiable, Equatable, Hashable {
     var usesWeight: Bool = true
     var increment: Double = 2.5        // lb; progression step (kg uses half, rounded to 1)
 
+    // Identity is the id alone.
     static func == (a: Exercise, b: Exercise) -> Bool { a.id == b.id }
     func hash(into h: inout Hasher) { h.combine(id) }
 
@@ -73,7 +87,9 @@ struct Exercise: Codable, Identifiable, Equatable, Hashable {
     var supportsCamera: Bool { tracking.contains(.camera) && camera != nil }
 }
 
+/// Static catalogue (namespace only; never instantiated).
 enum ExerciseLibrary {
+    // Camera rest/work angles are reasonable starting values, not yet tuned on real users.
     static let all: [Exercise] = [
         Exercise(id: "bicep-curl", name: "Bicep curl", group: .arms, tracking: [.sensor, .camera, .manual],
                  camera: CameraRepConfig(metric: .forearmFromVertical, restDeg: 15, workDeg: 125,
@@ -109,10 +125,12 @@ enum ExerciseLibrary {
         Exercise(id: "crunch", name: "Crunch", group: .core, tracking: [.sensor, .manual], camera: nil, usesWeight: false),
     ]
 
+    /// Look up an exercise by id (nil if unknown, e.g. from a newer app version).
     static func exercise(_ id: String) -> Exercise? { all.first { $0.id == id } }
     static var cameraExercises: [Exercise] { all.filter(\.supportsCamera) }
 
     /// Built-in workouts. Users can copy and edit them or make their own.
+    /// Weight numbers are plain values in the unit the workout is started with (see PlannedExercise.weight).
     static let templates: [WorkoutTemplate] = [
         WorkoutTemplate(id: "builtin-arms", name: "Arm day", builtIn: true, items: [
             PlannedExercise(exerciseId: "bicep-curl", sets: 3, reps: 10, weight: 15, restSeconds: 90),
