@@ -1,3 +1,17 @@
+//
+//  PoseCamera.swift
+//  SmartBell — Camera
+//
+//  Camera capture + body-pose detection, and the two SwiftUI pieces that display it:
+//    • PoseCamera      – AVCaptureSession → VNDetectHumanBodyPoseRequest → PoseFrame
+//    • CameraPreview   – the live video layer
+//    • SkeletonOverlay – draws the detected joints and bones on top of the preview
+//  AppModel sets `onFrame` and sends each frame to CameraLab / the active workout.
+//
+//  Threads: session setup on `sessionQueue`, frame processing on `videoQueue`,
+//  published results on the main thread.
+//
+
 import AVFoundation
 import Vision
 import SwiftUI
@@ -25,8 +39,8 @@ final class PoseCamera: NSObject, ObservableObject {
     private let videoQueue = DispatchQueue(label: "smartbell.camera.video", qos: .userInitiated)
     private let output = AVCaptureVideoDataOutput()
     private var outputAdded = false
-    private var users = 0
-    private var lastFrameTime: TimeInterval?
+    private var users = 0                      // reference count of views that need the camera
+    private var lastFrameTime: TimeInterval?   // for the fps estimate
 
     /// Views call start() on appear and stop() on disappear; the camera runs while anyone needs it.
     func start() {
@@ -57,6 +71,7 @@ final class PoseCamera: NSObject, ObservableObject {
         frame = nil
     }
 
+    /// Switch between front and back cameras.
     func flip() {
         usingFront.toggle()
         if users > 0 { configureAndRun(front: usingFront) }
@@ -102,6 +117,8 @@ final class PoseCamera: NSObject, ObservableObject {
 }
 
 extension PoseCamera: AVCaptureVideoDataOutputSampleBufferDelegate {
+    /// Runs on videoQueue for every frame: detect the most confident person, convert
+    /// their joints to PoseFrame, then publish on the main thread.
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
@@ -125,6 +142,7 @@ extension PoseCamera: AVCaptureVideoDataOutputSampleBufferDelegate {
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            // Smoothed frames per second for display.
             if let last = self.lastFrameTime, time > last {
                 self.fps = self.fps * 0.9 + (1 / (time - last)) * 0.1
             }
@@ -169,6 +187,7 @@ struct SkeletonOverlay: View {
     var body: some View {
         Canvas { ctx, size in
             guard let f = frame, f.imageSize.width > 0, f.imageSize.height > 0 else { return }
+            // Same aspect-fit math as the preview layer: scale, then centre (letterbox offsets ox, oy).
             let s = min(size.width / f.imageSize.width, size.height / f.imageSize.height)
             let w = f.imageSize.width * s, h = f.imageSize.height * s
             let ox = (size.width - w) / 2, oy = (size.height - h) / 2
@@ -179,6 +198,7 @@ struct SkeletonOverlay: View {
                 var path = Path()
                 path.move(to: map(pa))
                 path.addLine(to: map(pb))
+                // Bones used by the current exercise's angle are drawn thicker in yellow.
                 let hot = highlight.contains(a) && highlight.contains(b)
                 ctx.stroke(path, with: .color(hot ? .yellow : .green), style: StrokeStyle(lineWidth: hot ? 5 : 3, lineCap: .round))
             }

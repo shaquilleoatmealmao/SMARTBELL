@@ -1,3 +1,14 @@
+//
+//  WorkoutStore.swift
+//  SmartBell — Storage
+//
+//  On-device persistence for workout data: finished sessions, user-made templates,
+//  and the suggested weight for next time per exercise. Everything is one JSON file,
+//  Documents/fitness.json, rewritten after each change. (Calibration and taught
+//  profiles are saved separately by AppModel in UserDefaults; recordings by Recorder.)
+//  No data leaves the phone.
+//
+
 import Foundation
 
 /// Persists sessions, custom workouts and next-time weights as JSON in the app's Documents folder.
@@ -8,6 +19,7 @@ final class WorkoutStore: ObservableObject {
     @Published private(set) var nextWeights: [String: Double] = [:]  // exerciseId -> weight (in unit below)
     @Published private(set) var nextWeightUnits: [String: WeightUnit] = [:]
 
+    /// Shape of fitness.json.
     private struct Saved: Codable {
         var sessions: [WorkoutSession]
         var customTemplates: [WorkoutTemplate]
@@ -17,8 +29,9 @@ final class WorkoutStore: ObservableObject {
 
     private static var docs: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] }
     private var url: URL { Self.docs.appendingPathComponent("fitness.json") }
-    private var legacyURL: URL { Self.docs.appendingPathComponent("workouts.json") }
+    private var legacyURL: URL { Self.docs.appendingPathComponent("workouts.json") }  // old v2.0 format
 
+    /// Load fitness.json; if it doesn't exist (first launch after updating), import the old file.
     init() {
         if let data = try? Data(contentsOf: url), let s = try? JSONDecoder().decode(Saved.self, from: data) {
             sessions = s.sessions
@@ -30,10 +43,12 @@ final class WorkoutStore: ObservableObject {
         }
     }
 
+    /// User templates first, then the built-in ones.
     var templates: [WorkoutTemplate] { customTemplates + ExerciseLibrary.templates }
 
     // MARK: sessions
 
+    /// Save a finished workout and update each exercise's next-time weight from Progression.
     func add(_ s: WorkoutSession) {
         sessions.insert(s, at: 0)
         for log in s.exercises {
@@ -68,6 +83,7 @@ final class WorkoutStore: ObservableObject {
 
     // MARK: templates
 
+    /// Insert or replace a user template (editing a built-in one saves a custom copy).
     func saveTemplate(_ t: WorkoutTemplate) {
         var t = t
         t.builtIn = false
@@ -80,6 +96,7 @@ final class WorkoutStore: ObservableObject {
         save()
     }
 
+    /// Write everything; .atomic means a crash mid-write can't leave a half-written file.
     private func save() {
         let s = Saved(sessions: sessions, customTemplates: customTemplates, nextWeights: nextWeights, nextWeightUnits: nextWeightUnits)
         if let data = try? JSONEncoder().encode(s) { try? data.write(to: url, options: .atomic) }
@@ -99,6 +116,7 @@ final class WorkoutStore: ObservableObject {
         var isDemo: Bool
     }
 
+    /// Convert each old single-set record into a one-exercise, one-set session.
     private func migrateLegacy() {
         guard let data = try? Data(contentsOf: legacyURL),
               let old = try? JSONDecoder().decode([LegacySet].self, from: data), !old.isEmpty else { return }

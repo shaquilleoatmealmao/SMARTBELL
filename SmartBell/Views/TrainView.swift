@@ -1,9 +1,19 @@
+//
+//  TrainView.swift
+//  SmartBell — Views
+//
+//  Train (home) tab: this week's stats, sensor connection, workout templates
+//  (start / edit / delete), and quick-start by muscle group. Also defines the
+//  rows used there, WeekStrip, and TemplateEditorView for building workouts.
+//
+
 import SwiftUI
 
 /// Home tab: this week at a glance, your workouts, and quick start.
 struct TrainView: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("unit") private var unit = WeightUnit.lb
+    // Template open in the editor sheet (nil = closed).
     @State private var editing: WorkoutTemplate?
 
     var body: some View {
@@ -13,6 +23,7 @@ struct TrainView: View {
 
                 Section {
                     ConnectionCard().listRowInsets(EdgeInsets())
+                    // Nudge to calibrate once the sensor is streaming but curls can't be tracked yet.
                     if model.hasData && model.calibration == nil {
                         Button {
                             model.startCalibration()
@@ -38,6 +49,7 @@ struct TrainView: View {
                         }
                     }
                     Button {
+                        // New, empty template.
                         editing = WorkoutTemplate(name: "My workout", items: [])
                     } label: {
                         Label("New workout", systemImage: "plus")
@@ -61,6 +73,7 @@ struct TrainView: View {
             }
             .navigationTitle("Train")
             .toolbar {
+                // lb / kg switch, shared app-wide via @AppStorage("unit").
                 Picker("Unit", selection: $unit) {
                     ForEach(WeightUnit.allCases) { Text($0.rawValue).tag($0) }
                 }
@@ -74,11 +87,13 @@ struct TrainView: View {
     }
 }
 
+/// One workout in the list, with a play button that starts it.
 struct TemplateRow: View {
     var template: WorkoutTemplate
     var unit: WeightUnit
     var start: () -> Void
 
+    /// Rough duration: per set, ~3.5 s per rep plus the rest period.
     private var minutes: Int {
         let s = template.items.reduce(0.0) { $0 + Double($1.sets) * (Double($1.reps) * 3.5 + Double($1.restSeconds)) }
         return max(1, Int((s / 60).rounded()))
@@ -105,6 +120,7 @@ struct TemplateRow: View {
     }
 }
 
+/// Exercise name with icons for the automatic tracking modes it supports.
 struct ExerciseRow: View {
     var exercise: Exercise
 
@@ -143,6 +159,7 @@ struct WeekStrip: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// 12345 → "12.3k" so large volumes fit in a tile.
     private func compact(_ v: Double) -> String {
         v >= 10000 ? String(format: "%.1fk", v / 1000) : String(Int(v.rounded()))
     }
@@ -197,6 +214,7 @@ struct TemplateEditorView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
                     var t = template
+                    // Give an edited built-in template a new id so it's saved as a copy.
                     if t.builtIn { t.id = UUID().uuidString }
                     model.store.saveTemplate(t)
                     dismiss()

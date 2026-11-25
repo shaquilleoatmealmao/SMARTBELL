@@ -14,9 +14,12 @@ import numpy as np
 import simulate as sim
 from smartbell_motion import Calibrator, MotionEngine, Params
 
+# sample range of the simulated still hang used for calibration step 1
 CAL_HANG_ROWS = (30, 280)
 
 
+# One simulated session: calibrate on its first part, then run the engine on the
+# workout and compare against the simulator's ground truth.
 def run(seed, plot=None, verbose=False):
     cal_segs = sim.calibration_segments()
     rows, true_beta, truth, _ = sim.simulate(cal_segs + sim.workout_segments(), seed=seed)

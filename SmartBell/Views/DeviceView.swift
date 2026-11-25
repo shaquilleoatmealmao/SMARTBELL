@@ -1,14 +1,24 @@
+//
+//  DeviceView.swift
+//  SmartBell — Views
+//
+//  Device tab: sensor connection, live diagnostics (angle, rate, stillness, gyro bias),
+//  calibration, taught exercises, raw-data recording and replay, and feedback settings.
+//  Also defines ReplayView, which shows the result of replaying a recording.
+//
+
 import SwiftUI
 import Charts
 import UniformTypeIdentifiers
 
 struct DeviceView: View {
     @EnvironmentObject var model: AppModel
+    // Feedback switches, stored in UserDefaults under Coach's keys (Coach reads them directly).
     @AppStorage(Coach.speakCountKey) private var speakCount = true
     @AppStorage(Coach.speakCuesKey) private var speakCues = true
     @AppStorage(Coach.hapticsKey) private var haptics = true
     @AppStorage(Coach.speakGuidanceKey) private var speakGuidance = true
-    @AppStorage(WorkoutController.autoFinishKey) private var autoFinish = true
+    // File-picker visibility, replay result sheet, and replay error alert.
     @State private var importing = false
     @State private var report: ReplayReport?
     @State private var replayError = false
@@ -22,6 +32,7 @@ struct DeviceView: View {
                     Section { Button("Disconnect", role: .destructive) { model.ble.disconnect() } }
                 }
 
+                // Debug readouts: useful to check the sensor before calibrating.
                 Section("Live sensor") {
                     LabeledContent("Forearm angle", value: "\(Int(model.live.beta))°")
                     LabeledContent("Sample rate", value: "\(Int(model.live.sampleRate.rounded())) Hz")
@@ -32,6 +43,7 @@ struct DeviceView: View {
                     if model.ble.malformedLines > 0 {
                         LabeledContent("Malformed lines", value: "\(model.ble.malformedLines)")
                     }
+                    // Last ~6 s of forearm angle (history is sampled at 30 Hz).
                     Chart(Array(model.live.angleHistory.enumerated()), id: \.offset) { i, v in
                         LineMark(x: .value("t", Double(i) / 30.0), y: .value("deg", v))
                     }
@@ -52,6 +64,7 @@ struct DeviceView: View {
                     Text("Recalibrate whenever the strap is moved or re-tightened.")
                 }
 
+                // List of taught exercises (defined in TeachView.swift).
                 TaughtExercisesSection()
 
                 Section {
@@ -81,7 +94,6 @@ struct DeviceView: View {
                     Toggle("Speak form cues", isOn: $speakCues)
                     Toggle("Speak workout guidance and rest timer", isOn: $speakGuidance)
                     Toggle("Vibrate", isOn: $haptics)
-                    Toggle("Finish sets automatically after a pause", isOn: $autoFinish)
                 }
 
                 Section("How it works") {
@@ -106,11 +118,14 @@ struct DeviceView: View {
         }
     }
 
+    /// Replay a recording through the motion engine and show the report (or an error).
     private func runReplay(_ url: URL) {
         if let r = model.replay(url) { report = r } else { replayError = true }
     }
 }
 
+/// Result of a replay: summary, forearm-angle plot with each rep shaded
+/// (green = counted, yellow = partial), and per-rep details.
 struct ReplayView: View {
     var report: ReplayReport
 
@@ -126,6 +141,7 @@ struct ReplayView: View {
             Section("Forearm angle") {
                 Chart {
                     ForEach(Array(report.angles.enumerated()), id: \.offset) { i, v in
+                        // report.angles is sampled every 0.05 s (20 Hz).
                         LineMark(x: .value("s", Double(i) * 0.05), y: .value("deg", v))
                     }
                     ForEach(report.reps) { r in

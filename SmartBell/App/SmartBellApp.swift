@@ -1,7 +1,17 @@
+//
+//  SmartBellApp.swift
+//  SmartBell — App
+//
+//  App entry point. Creates the single shared AppModel and the five-tab root screen
+//  (Train, Camera, Progress, History, Device). Full-screen workout and the
+//  calibration / teaching sheets are presented from here based on AppModel state.
+//
+
 import SwiftUI
 
 @main
 struct SmartBellApp: App {
+    // One AppModel for the app's lifetime; every view reads it from the environment.
     @StateObject private var model = AppModel()
 
     var body: some Scene {
@@ -12,6 +22,8 @@ struct SmartBellApp: App {
     }
 }
 
+/// Tab bar plus the modal screens. Modals are driven by AppModel (not local @State) so
+/// that the model can open/close them, e.g. when calibration finishes.
 struct RootView: View {
     @EnvironmentObject var model: AppModel
     @State private var tab = 0
@@ -34,6 +46,7 @@ struct RootView: View {
                 .tabItem { Label("Device", systemImage: "sensor") }
                 .tag(4)
         }
+        // A workout in progress takes over the whole screen.
         .fullScreenCover(isPresented: Binding(get: { model.workout != nil },
                                               set: { if !$0 { model.closeWorkout() } })) {
             if let w = model.workout {

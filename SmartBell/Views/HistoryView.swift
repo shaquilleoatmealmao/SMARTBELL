@@ -1,7 +1,16 @@
+//
+//  HistoryView.swift
+//  SmartBell — Views
+//
+//  History tab: every saved workout, newest first. Tap for the full summary
+//  (SessionSummaryView); swipe to delete.
+//
+
 import SwiftUI
 
 struct HistoryView: View {
     @EnvironmentObject var model: AppModel
+    // Display unit, shared app-wide through UserDefaults key "unit".
     @AppStorage("unit") private var unit = WeightUnit.lb
 
     var body: some View {
@@ -24,6 +33,7 @@ struct HistoryView: View {
                                 }
                                 Text(s.start.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption).foregroundStyle(.secondary)
+                                // sets · reps · volume · duration
                                 Text("\(s.allSets.count) sets · \(s.totalReps) reps · \(Int(s.volume(in: unit).rounded())) \(unit.rawValue) · \(durationText(s.duration))")
                                     .font(.caption).foregroundStyle(.secondary)
                             }

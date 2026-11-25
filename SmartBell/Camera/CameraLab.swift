@@ -1,11 +1,25 @@
+//
+//  CameraLab.swift
+//  SmartBell — Camera
+//
+//  View model for the Camera tab (CameraView). AppModel calls process() for every
+//  camera frame while the tab is visible. Two jobs:
+//    1. Camera-only rep counting for the selected exercise (AngleRepCounter).
+//    2. Accuracy check: pairs the camera's forearm angle with SmartBell's β frame by
+//       frame and accumulates mean / RMS / max difference; can save the pairs as CSV.
+//
+
 import Foundation
 
 /// State behind the Camera tab: live joint angles, camera rep counting, and a side-by-side
 /// comparison of the camera's forearm angle with the SmartBell's (to measure sensor accuracy).
 @MainActor
 final class CameraLab: ObservableObject {
+    /// One matched measurement: time (s from first pair), sensor β and camera angle (deg).
     struct Pair { var t: Double; var sensor: Double; var camera: Double }
 
+    // Changing the exercise builds a fresh counter with that exercise's camera config
+    // (nil if the exercise has no camera support).
     @Published var exercise: Exercise = ExerciseLibrary.exercise("bicep-curl")! {
         didSet { counter = exercise.camera.map { AngleRepCounter(config: $0) } }
     }
@@ -22,9 +36,10 @@ final class CameraLab: ObservableObject {
     @Published private(set) var stats = Stats()
     /// True while the Camera tab is on screen (so it doesn't count or speak during a workout).
     var isActive = false
-    private var log: [Pair] = []
-    private var t0: Double?
+    private var log: [Pair] = []     // every pair since startMeasuring(), saved by stopMeasuring()
+    private var t0: Double?          // time of the first pair (chart x-axis origin)
 
+    /// Running statistics of (sensor − camera), so no history is needed to compute them.
     struct Stats {
         var n = 0
         var sum = 0.0, sumSq = 0.0, maxAbs = 0.0
@@ -59,6 +74,7 @@ final class CameraLab: ObservableObject {
             }
         }
 
+        // Comparison needs both a sensor angle and a visible forearm in this frame.
         guard let f = frame, let s = sensor, let c = forearmAngle else { return }
         if t0 == nil { t0 = f.time }
         let p = Pair(t: f.time - (t0 ?? f.time), sensor: s, camera: c)

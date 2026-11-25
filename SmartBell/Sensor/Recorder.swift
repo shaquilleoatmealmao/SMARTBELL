@@ -1,3 +1,15 @@
+//
+//  Recorder.swift
+//  SmartBell — Sensor
+//
+//  Saves and loads raw sensor recordings (Device › Record). File layout:
+//      # SmartBell recording v1
+//      # calibration: {JSON of the Calibration in use}
+//      ax,ay,az,gx,gy,gz,dt_s
+//      0.123,9.801,...            ← one line per sample, exactly as the firmware sent it
+//  Files live in Documents/Recordings/ and can be shared from the app.
+//
+
 import Foundation
 
 /// Records the raw sensor stream to CSV (same columns the ESP32 sends) so sessions can be
@@ -9,10 +21,11 @@ final class Recorder: ObservableObject {
     @Published private(set) var recordings: [URL] = []
     @Published private(set) var recordedSamples = 0
 
-    private var lines: [String] = []
+    private var lines: [String] = []        // CSV rows held in memory until stop()
     private var calibration: Calibration?
-    private var startDate = Date()
+    private var startDate = Date()          // used in the file name
 
+    /// Documents/Recordings, created on first use.
     static var folder: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("Recordings", isDirectory: true)
@@ -37,6 +50,7 @@ final class Recorder: ObservableObject {
         if lines.count > 100 * 60 * 30 { _ = stop() } // 30 min cap
     }
 
+    /// Write the recording to disk. Returns the file URL, or nil if nothing was recorded.
     @discardableResult
     func stop() -> URL? {
         guard isRecording else { return nil }
@@ -59,6 +73,7 @@ final class Recorder: ObservableObject {
         return url
     }
 
+    /// Re-list the recordings folder, newest first (file names start with the date).
     func refresh() {
         let urls = (try? FileManager.default.contentsOfDirectory(at: Recorder.folder, includingPropertiesForKeys: nil)) ?? []
         recordings = urls.filter { $0.pathExtension == "csv" }.sorted { $0.lastPathComponent > $1.lastPathComponent }
@@ -71,6 +86,7 @@ final class Recorder: ObservableObject {
 
     /// Reads a recording (or any CSV of firmware rows). Lines that don't parse are skipped.
     static func load(_ url: URL) -> (calibration: Calibration?, samples: [SensorSample])? {
+        // Needed for files picked from outside the app's sandbox (e.g. the Files app).
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }

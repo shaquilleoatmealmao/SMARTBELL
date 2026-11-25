@@ -11,10 +11,12 @@ SRC = os.path.join(ROOT, "SmartBell")
 BUNDLE_ID = "ca.uwaterloo.ece198.smartbell"
 
 
+# Deterministic 24-hex-digit Xcode object id from a name, so regenerating gives the same file.
 def oid(*parts):
     return hashlib.md5("/".join(parts).encode()).hexdigest()[:24].upper()
 
 
+# Collect every .swift file under SmartBell/ (relative paths) and the folders they're in.
 files = []
 for dirpath, _, names in os.walk(SRC):
     for n in sorted(names):
@@ -112,6 +114,7 @@ w(f"\t\t{P['sources']} /* Sources */ = {{\n\t\t\tisa = PBXSourcesBuildPhase;\n\t
 w("/* End PBXSourcesBuildPhase section */\n")
 
 
+# Emit one XCBuildConfiguration block (Debug or Release).
 def cfg(key, name, settings):
     body = "\n".join(f"\t\t\t\t{k} = {v};" for k, v in settings)
     return f"\t\t{P[key]} /* {name} */ = {{\n\t\t\tisa = XCBuildConfiguration;\n\t\t\tbuildSettings = {{\n{body}\n\t\t\t}};\n\t\t\tname = {name};\n\t\t}};"

@@ -1,3 +1,12 @@
+//
+//  CameraView.swift
+//  SmartBell — Views
+//
+//  Camera tab UI. Four cards: live preview with skeleton, camera rep counter,
+//  current joint angles, and the SmartBell-vs-camera accuracy comparison.
+//  State lives in CameraLab (counting, comparison stats) and PoseCamera (video).
+//
+
 import SwiftUI
 import Charts
 
@@ -23,6 +32,8 @@ struct CameraView: View {
             .navigationTitle("Camera")
             .navigationBarTitleDisplayMode(.inline)
         }
+        // Camera runs only while this tab is visible; leaving the tab also saves any
+        // comparison in progress.
         .onAppear {
             camera.start()
             lab.isActive = true
@@ -60,6 +71,7 @@ struct CameraView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
+    /// Text over the preview when there's no usable picture (nil = show nothing).
     private var statusMessage: String? {
         switch camera.status {
         case .denied: return "Camera access is off.\nTurn it on in Settings › SmartBell."
@@ -69,6 +81,7 @@ struct CameraView: View {
         }
     }
 
+    /// Joints used by the selected exercise's angle, highlighted on the skeleton.
     private var highlightedJoints: Set<Joint> {
         switch lab.exercise.camera?.metric {
         case .forearmFromVertical?, .elbowFlexion?:
@@ -84,6 +97,7 @@ struct CameraView: View {
 
     // MARK: counting
 
+    /// Exercise picker, rep count, tracked angle, progress bar, last-rep feedback, setup hint.
     private var countCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -123,6 +137,7 @@ struct CameraView: View {
         .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
     }
 
+    /// Camera elbow and forearm angles next to the SmartBell's forearm angle.
     private var anglesCard: some View {
         HStack(spacing: 0) {
             angle(lab.elbowAngle, "Elbow bend (camera)")
@@ -143,6 +158,8 @@ struct CameraView: View {
 
     // MARK: comparison
 
+    /// Live chart of both forearm angles; Start/Stop measuring accumulates error stats
+    /// and saves the paired samples as a CSV that can be shared.
     private var compareCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("SmartBell vs camera").font(.headline)

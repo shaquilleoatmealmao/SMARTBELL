@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
+# Swift counterpart: SmartBell/Sensor/DemoSensor.swift uses the same model.
 G = 9.80665
 
 
@@ -40,6 +41,8 @@ def smooth(x):  # minimum-jerk 0..1
     return x * x * x * (10 - 15 * x + 6 * x * x)
 
 
+# Turns a list of hold / rep segments into per-sample ground truth (forearm angle, twist,
+# sway, elbow swing) at fs Hz.
 def build_timeline(segments, fs=100.0):
     """segments: list of ('hold', seconds, beta) or ('rep', Rep). Returns arrays."""
     t, beta, twist, sway, elbow = [], [], [], [], []
@@ -135,10 +138,12 @@ def simulate(segments, seed=1, mount=None, lever=0.06, bias_dps=(2.5, -1.8, 1.2)
     return out, tb, truth, mount
 
 
+# The calibration script: still hang, then 3 slow full curls.
 def calibration_segments():
     return [("hold", 3.0, 0.0)] + [("rep", Rep(con=1.6, hold=0.4, ecc=2.2, rest=1.0, top=138))] * 3 + [("hold", 1.0, 6.0)]
 
 
+# A scripted set with good reps and one example of each form fault.
 def workout_segments():
     reps = [
         Rep(),

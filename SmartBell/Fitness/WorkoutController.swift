@@ -1,32 +1,45 @@
+//
+//  WorkoutController.swift
+//  SmartBell — Fitness
+//
+//  State machine for one workout in progress (created by AppModel.startWorkout,
+//  displayed by WorkoutPlayerView). Receives reps from three inputs:
+//    sensorCounted()/sensorResult()  ← AppModel's MotionEngine (SmartBell)
+//    cameraFrame()                   ← PoseCamera, counted here with AngleRepCounter
+//    adjustReps()/startSet()         ← buttons (manual)
+//  and builds the WorkoutSession that is saved when the workout finishes.
+//
+
 import Foundation
 
 /// Runs a guided workout, hands-free:
 ///
-///   ready ──first rep detected (or Start)──▶ active ──no rep for a few s (or Done)──▶ resting
-///     ▲                                                                                  │
-///     └────────── rest timer ends (or Skip) ◀────────────────────────────────────────────┘
+///   ready ──first rep detected (or Start)──▶ active ──Done──▶ resting
+///     ▲                                                          │
+///     └────────── rest timer ends (or Skip) ◀────────────────────┘
 ///   after the last set of the last exercise ──▶ finished
 ///
-/// With the SmartBell or the camera you never need to touch the phone: the first rep starts the
-/// set, a pause ends it, the rest timer runs and speaks, and the next set starts when you do.
+/// With the SmartBell or the camera the first rep starts the set. A set only ends when you tap
+/// Done, however long you take between reps. The rest timer then runs and speaks, and the next
+/// set starts when you do.
 /// Rest is measured from the end of one set to the first rep of the next.
 @MainActor
 final class WorkoutController: ObservableObject {
     enum Phase: Equatable { case ready, active, resting, finished }
 
-    @Published private(set) var session: WorkoutSession
+    @Published private(set) var session: WorkoutSession      // everything logged so far
     @Published private(set) var phase = Phase.ready
-    @Published private(set) var exerciseIndex = 0
-    @Published private(set) var source: TrackingMode = .manual
-    @Published private(set) var reps = 0
+    @Published private(set) var exerciseIndex = 0             // which item of the template we're on
+    @Published private(set) var source: TrackingMode = .manual  // how the current set is counted
+    @Published private(set) var reps = 0                      // reps in the current set
     @Published private(set) var partials = 0
     @Published private(set) var lastSensorRep: RepResult? = nil
     @Published private(set) var lastCameraRep: CameraRep? = nil
-    @Published private(set) var cameraProgress = 0.0
+    @Published private(set) var cameraProgress = 0.0          // 0...1, for the camera progress bar
     @Published private(set) var restRemaining: TimeInterval = 0
     @Published private(set) var restTotal: TimeInterval = 0
-    @Published private(set) var lastFinished: (exercise: Int, index: Int)? = nil
-    @Published var weight: Double = 0
+    @Published private(set) var lastFinished: (exercise: Int, index: Int)? = nil  // set just completed (editable on the rest screen)
+    @Published var weight: Double = 0                         // user can edit before/while lifting
     @Published var targetReps: Int = 10
 
     let unit: WeightUnit
@@ -35,39 +48,22 @@ final class WorkoutController: ObservableObject {
     private let sensorStatus: @MainActor (Exercise) -> SensorStatus
     /// Called once when the workout finishes normally (not on cancel).
     var onFinished: (@MainActor () -> Void)?
-    private let suggestedWeights: [String: Double]
-    private var setStart: Date?
-    private var lastSetEnd: Date?
-    private var lastActivity = Date()      // last counted rep, partial, or rep in progress
-    private var autoEnded: AutoEnded?
-    /// True for ~20 s after a set ended on its own: lifting again continues that set.
-    @Published private(set) var canResume = false
-
-    /// What's needed to undo an automatic set end.
-    private struct AutoEnded {
-        var exerciseIndex: Int
-        var log: SetLog
-        var targetReps: Int
-        var previousSetEnd: Date?
-        var previousLastFinished: (exercise: Int, index: Int)?
-        var endedAt: Date
-    }
-
-    nonisolated static let autoFinishKey = "autoFinishSets"
-    private var autoFinishEnabled: Bool { UserDefaults.standard.object(forKey: Self.autoFinishKey) as? Bool ?? true }
-    nonisolated static let resumeWindow: TimeInterval = 20
-    private var sensorReps: [RepResult] = []
+    private let suggestedWeights: [String: Double]   // exerciseId -> Progression's suggestion
+    private var setStart: Date?                      // nil when no set is active
+    private var lastSetEnd: Date?                    // for rest timing
+    private var sensorReps: [RepResult] = []         // per-rep detail for the current set
     private var cameraReps: [CameraRep] = []
     private var cameraCounter: AngleRepCounter?
-    private var timer: Timer?
-    private var restWarned = false
-    private var restAnnounced = false
+    private var timer: Timer?                        // 4 Hz tick for the rest countdown
+    private var restWarned = false                   // "10 seconds" already spoken
+    private var restAnnounced = false                // rest-over already handled
 
     init(template: WorkoutTemplate, unit: WeightUnit, isDemo: Bool, coach: Coach, store: WorkoutStore,
          sensorStatus: @escaping @MainActor (Exercise) -> SensorStatus) {
         self.unit = unit
         self.coach = coach
         self.sensorStatus = sensorStatus
+        // For each exercise: last session's sets (shown as "last time") and a suggested weight.
         var prev: [String: [SetLog]] = [:]
         var sugg: [String: Double] = [:]
         for item in template.items where prev[item.exerciseId] == nil {
@@ -84,6 +80,7 @@ final class WorkoutController: ObservableObject {
 
     // MARK: - current position
 
+    // Index is clamped so these stay valid after the last exercise finishes.
     var currentLog: ExerciseLog { session.exercises[min(exerciseIndex, session.exercises.count - 1)] }
     var exercise: Exercise? { currentLog.exercise }
     var plan: PlannedExercise { currentLog.plan }
@@ -103,6 +100,7 @@ final class WorkoutController: ObservableObject {
 
     // MARK: - lifecycle
 
+    /// Start the workout: prepare audio/haptics, start the tick timer, announce the first set.
     func begin() {
         coach.beginSet()
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
@@ -111,6 +109,7 @@ final class WorkoutController: ObservableObject {
         enterReady(announce: true)
     }
 
+    /// Switch counting method (not allowed mid-set).
     func setSource(_ s: TrackingMode) {
         guard phase != .active else { return }
         source = s
@@ -122,8 +121,6 @@ final class WorkoutController: ObservableObject {
         guard phase == .ready || phase == .resting else { return }
         phase = .active
         setStart = Date()
-        lastActivity = Date()
-        clearResume()
         reps = 0
         partials = 0
         sensorReps = []
@@ -134,24 +131,19 @@ final class WorkoutController: ObservableObject {
     }
 
     /// Manual end (Done button).
-    func finishSet() { finishSet(auto: false) }
-
-    /// `auto`: ended by a pause. Then lifting again within 20 s continues the same set.
-    private func finishSet(auto: Bool) {
+    func finishSet() {
         guard phase == .active, let start = setStart else { return }
         let now = Date()
         let rest = lastSetEnd.map { start.timeIntervalSince($0) }
         let log = SetLog(reps: reps, partials: partials, weight: weight, unit: unit, rpe: nil, start: start,
                          duration: now.timeIntervalSince(start), restBefore: rest, source: source,
                          sensorReps: sensorReps, cameraReps: cameraReps)
-        autoEnded = auto ? AutoEnded(exerciseIndex: exerciseIndex, log: log, targetReps: targetReps,
-                                     previousSetEnd: lastSetEnd, previousLastFinished: lastFinished, endedAt: now) : nil
-        canResume = auto
         session.exercises[exerciseIndex].sets.append(log)
         lastFinished = (exerciseIndex, session.exercises[exerciseIndex].sets.count - 1)
         lastSetEnd = now
         setStart = nil
 
+        // Spoken summary; warn about fatigue if rep speed dropped 30%+ during the set.
         var line = "\(reps) reps."
         if let vl = log.velocityLoss, vl >= 0.3 {
             line += " Speed dropped \(Int(vl * 100)) percent, you're close to failure."
@@ -161,6 +153,7 @@ final class WorkoutController: ObservableObject {
         if currentLog.sets.count >= plan.sets {
             // exercise done
             if exerciseIndex + 1 < session.exercises.count {
+                // Move to the next exercise, resting for the finished exercise's rest time.
                 exerciseIndex += 1
                 prepareExercise()
                 enterRest(seconds: Double(session.exercises[exerciseIndex - 1].plan.restSeconds))
@@ -172,6 +165,9 @@ final class WorkoutController: ObservableObject {
         }
     }
 
+    // MARK: - buttons on the workout screen
+
+    /// − / + buttons during a set.
     func adjustReps(_ delta: Int) {
         guard phase == .active else { return }
         reps = max(0, reps + delta)
@@ -179,7 +175,6 @@ final class WorkoutController: ObservableObject {
 
     func skipRest() {
         guard phase == .resting else { return }
-        clearResume()
         enterReady(announce: true)
     }
 
@@ -193,8 +188,8 @@ final class WorkoutController: ObservableObject {
         session.exercises[exerciseIndex].plan.sets += 1
     }
 
+    /// Move on; a set in progress is kept if it has any reps.
     func skipExercise() {
-        clearResume()
         if phase == .active { finishSetQuietly() }
         if exerciseIndex + 1 < session.exercises.count {
             exerciseIndex += 1
@@ -222,6 +217,7 @@ final class WorkoutController: ObservableObject {
         return session.exercises[lf.exercise].sets[lf.index]
     }
 
+    /// End normally: close any open set, stamp the end time and let AppModel save the session.
     func finish() {
         if phase == .active { finishSetQuietly() }
         guard phase != .finished else { return }
@@ -234,6 +230,7 @@ final class WorkoutController: ObservableObject {
         onFinished?()
     }
 
+    /// Discard: stop everything without calling onFinished (nothing is saved).
     func cancel() {
         timer?.invalidate()
         timer = nil
@@ -252,19 +249,19 @@ final class WorkoutController: ObservableObject {
     /// SmartBell finished analysing a rep (arrives ~0.3 s after it was counted).
     func sensorResult(_ r: RepResult) {
         guard source == .sensor, phase == .active else { return }
-        lastActivity = Date()
         sensorReps.append(r)
         if !r.counted { partials += 1 }
         lastSensorRep = r
         coach.repAnalysed(r)
     }
 
+    /// Every camera frame. Counting runs even while ready/resting so the first rep can
+    /// start the set hands-free; partials only count during an active set.
     func cameraFrame(_ f: PoseFrame?) {
         guard source == .camera, phase != .finished, cameraCounter != nil, let cfg = exercise?.camera else { return }
         let angle = f?.angle(cfg.metric)
         let event = cameraCounter!.push(angle: angle, time: f?.time ?? ProcessInfo.processInfo.systemUptime)
         cameraProgress = max(0, min(1, cameraCounter!.progress))
-        if cameraCounter!.inRep { noteMovement() }
         switch event {
         case .counted(_, let rep)?:
             repDetected()
@@ -273,7 +270,6 @@ final class WorkoutController: ObservableObject {
             if rep.downSeconds < 0.7 { coach.guide("Slower on the way back.") }
         case .partial(let rep)?:
             if phase == .active {
-                lastActivity = Date()
                 partials += 1
                 cameraReps.append(rep)
                 lastCameraRep = rep
@@ -286,58 +282,19 @@ final class WorkoutController: ObservableObject {
 
     // MARK: - internals
 
-    /// A rep is in progress (SmartBell or camera sees you mid-movement): don't end the set.
-    func noteMovement() {
-        if phase == .active { lastActivity = Date() }
-    }
-
-    /// Continue the set that just ended on its own, as if it never stopped.
-    func resumeSet() {
-        guard let a = autoEnded, phase == .resting || phase == .ready else { return }
-        clearResume()
-        if let i = session.exercises[a.exerciseIndex].sets.lastIndex(where: { $0.id == a.log.id }) {
-            session.exercises[a.exerciseIndex].sets.remove(at: i)
-        }
-        if exerciseIndex != a.exerciseIndex {
-            exerciseIndex = a.exerciseIndex
-            prepareExercise()
-        }
-        weight = a.log.weight
-        targetReps = a.targetReps
-        source = a.log.source
-        reps = a.log.reps
-        partials = a.log.partials
-        sensorReps = a.log.sensorReps
-        cameraReps = a.log.cameraReps
-        setStart = a.log.start
-        lastSetEnd = a.previousSetEnd
-        lastFinished = a.previousLastFinished
-        phase = .active
-        lastActivity = Date()
-        coach.guide("Continuing the set.")
-    }
-
-    private func clearResume() {
-        autoEnded = nil
-        canResume = false
-    }
-
+    /// A full rep from the sensor or camera.
     private func repDetected() {
         if phase == .ready || phase == .resting {
-            // Lifting again right after a set ended on its own: it wasn't over, continue it.
-            if let a = autoEnded, Date().timeIntervalSince(a.endedAt) < WorkoutController.resumeWindow {
-                resumeSet()
-            } else {
-                startSet()   // hands-free start
-            }
+            startSet()   // hands-free start
         }
         guard phase == .active else { return }
         reps += 1
-        lastActivity = Date()
         coach.repCounted(reps)
         if reps == targetReps { coach.guide("Target reached.") }
     }
 
+    /// Set up for the current exercise: weight (suggestion beats plan), target reps,
+    /// and the best available counting method (SmartBell if ready, else camera, else manual).
     private func prepareExercise() {
         let ex = exercise
         let p = plan
@@ -349,6 +306,7 @@ final class WorkoutController: ObservableObject {
         cameraCounter = ex?.camera.map { AngleRepCounter(config: $0) }
     }
 
+    /// Waiting for the next set; optionally speak what it is.
     private func enterReady(announce: Bool) {
         phase = .ready
         reps = 0
@@ -369,6 +327,8 @@ final class WorkoutController: ObservableObject {
         coach.guide("Rest \(Int(seconds)) seconds.")
     }
 
+    /// Like finishSet() but without announcements or rest; used when skipping/finishing
+    /// mid-set. A set with 0 reps is dropped.
     private func finishSetQuietly() {
         guard phase == .active, let start = setStart, reps > 0 else { phase = .ready; return }
         let now = Date()
@@ -380,23 +340,12 @@ final class WorkoutController: ObservableObject {
         phase = .ready
     }
 
+    /// 4 Hz: update the rest countdown, warn at 10 s (only for rests over 15 s), and
+    /// move to `ready` when rest is over.
     private func tick() {
         let now = Date()
         switch phase {
-        case .active:
-            guard source != .manual, reps > 0, autoFinishEnabled else { return }
-            // A real pause ends the set: 5 s once the target is reached, 12 s before it.
-            // "Pause" means no counted rep, no partial and no rep in progress, so slow or
-            // half-counted reps keep the set open. The last set of the workout only ends
-            // on its own once the target is reached.
-            let lastSetOfWorkout = exerciseIndex == session.exercises.count - 1 && currentLog.sets.count + 1 >= plan.sets
-            if reps < targetReps && lastSetOfWorkout { return }
-            let wait: TimeInterval = reps >= targetReps ? 5 : 12
-            if now.timeIntervalSince(lastActivity) > wait { finishSet(auto: true) }
         case .resting:
-            if canResume, let a = autoEnded, now.timeIntervalSince(a.endedAt) >= WorkoutController.resumeWindow {
-                clearResume()
-            }
             guard let end = lastSetEnd else { return }
             restRemaining = restTotal - now.timeIntervalSince(end)
             if restRemaining <= 10 && !restWarned && restTotal > 15 {
@@ -408,7 +357,7 @@ final class WorkoutController: ObservableObject {
                 coach.restOver()
                 enterReady(announce: true)
             }
-        case .ready, .finished:
+        case .ready, .active, .finished:
             break
         }
     }

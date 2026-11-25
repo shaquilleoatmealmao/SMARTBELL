@@ -1,3 +1,13 @@
+//
+//  SessionViews.swift
+//  SmartBell — Views
+//
+//  Read-only views of a saved workout, from coarse to fine:
+//    SessionSummaryView (whole workout) → SetRow (one line per set)
+//    → SetDetailView (rep-by-rep speed and form) → RepPathThumbnail (one rep's path)
+//  Also durationText(), the shared m:ss / h:mm:ss formatter.
+//
+
 import SwiftUI
 import Charts
 
@@ -27,6 +37,7 @@ struct SessionSummaryView: View {
                 .padding(.vertical, 6)
             }
 
+            // One section per exercise that has sets, ending with the next-time weight advice.
             ForEach(session.exercises.filter { !$0.sets.isEmpty }) { log in
                 Section {
                     ForEach(Array(log.sets.enumerated()), id: \.element.id) { i, s in
@@ -48,6 +59,7 @@ struct SessionSummaryView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    /// A big number with a small caption underneath.
     private func stat(_ value: String, _ label: String) -> some View {
         VStack(spacing: 2) {
             Text(value).font(.title3.bold().monospacedDigit())
@@ -57,11 +69,13 @@ struct SessionSummaryView: View {
     }
 }
 
+/// Seconds → "m:ss", or "h:mm:ss" from one hour.
 func durationText(_ t: TimeInterval) -> String {
     let s = Int(t.rounded())
     return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
 }
 
+/// Compact set line: reps × weight, plus counting method, rest, RPE, speed, velocity loss, partials.
 struct SetRow: View {
     var index: Int
     var set: SetLog
@@ -102,11 +116,13 @@ struct SetDetailView: View {
                 if let r = set.restBefore { LabeledContent("Rest before", value: durationText(r)) }
                 if let rpe = set.rpe { LabeledContent("RPE", value: "\(Int(rpe))") }
                 LabeledContent("Tracked by", value: set.source.label)
+                // 1RM estimates are unreliable above ~12 reps, so hide them.
                 if let e = set.estimatedOneRepMax, set.reps <= 12 {
                     LabeledContent("Estimated 1-rep max", value: "\(formatWeight(e)) \(set.unit.rawValue)")
                 }
             }
 
+            // Rep speed chart: a falling trend across the set = fatigue (velocity loss).
             let speeds = set.repSpeeds
             if speeds.count >= 2 {
                 Section {
@@ -123,6 +139,7 @@ struct SetDetailView: View {
                 } header: { Text("Lifting speed per rep") }
             }
 
+            // SmartBell sets only: score per rep (grey = partial) and each rep's details.
             if !set.sensorReps.isEmpty {
                 Section("Form per rep") {
                     Chart(Array(set.sensorReps.enumerated()), id: \.offset) { i, r in
@@ -160,6 +177,7 @@ struct RepPathThumbnail: View {
 
     var body: some View {
         Canvas { ctx, size in
+            // Elbow at c; each path point is the forearm direction (forward = x, up = z) scaled to r.
             let r = min(size.width, size.height) * 0.42
             let c = CGPoint(x: size.width * 0.4, y: size.height * 0.5)
             var p = Path()

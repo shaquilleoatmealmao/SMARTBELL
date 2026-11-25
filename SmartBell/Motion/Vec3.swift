@@ -1,3 +1,13 @@
+//
+//  Vec3.swift
+//  SmartBell — Motion
+//
+//  Minimal 3D math used by the motion pipeline: a vector type (Vec3), a 3×3
+//  rotation matrix (Mat3, only needed by the demo sensor), and degree/radian
+//  conversion constants. Kept dependency-free (no simd) so it can be mirrored
+//  line for line in tools/smartbell_motion.py.
+//
+
 import Foundation
 
 /// Small 3D vector type. All motion math is in Double.
@@ -10,12 +20,16 @@ struct Vec3: Codable, Equatable {
 
     static let zero = Vec3(0, 0, 0)
 
+    // Element-wise add/subtract, scalar multiply (either side) and negation.
     static func + (a: Vec3, b: Vec3) -> Vec3 { Vec3(a.x + b.x, a.y + b.y, a.z + b.z) }
     static func - (a: Vec3, b: Vec3) -> Vec3 { Vec3(a.x - b.x, a.y - b.y, a.z - b.z) }
     static func * (a: Vec3, s: Double) -> Vec3 { Vec3(a.x * s, a.y * s, a.z * s) }
     static func * (s: Double, a: Vec3) -> Vec3 { Vec3(a.x * s, a.y * s, a.z * s) }
     static prefix func - (a: Vec3) -> Vec3 { Vec3(-a.x, -a.y, -a.z) }
 
+    // dot = |a||b|cos(θ); cross = vector perpendicular to both (right-hand rule);
+    // norm = length; normalized = unit-length copy (left unchanged if ~zero length,
+    // so a zero vector never produces NaN).
     func dot(_ b: Vec3) -> Double { x * b.x + y * b.y + z * b.z }
     func cross(_ b: Vec3) -> Vec3 { Vec3(y * b.z - z * b.y, z * b.x - x * b.z, x * b.y - y * b.x) }
     var norm: Double { sqrt(dot(self)) }
@@ -29,8 +43,9 @@ struct Vec3: Codable, Equatable {
     func rotated(by rv: Vec3) -> Vec3 {
         let angle = rv.norm
         if angle < 1e-12 { return self }
-        let k = rv * (1.0 / angle)
+        let k = rv * (1.0 / angle)       // unit rotation axis
         let c = cos(angle), s = sin(angle)
+        // v' = v·cosθ + (k × v)·sinθ + k·(k·v)·(1 − cosθ)
         return self * c + k.cross(self) * s + k * (k.dot(self) * (1.0 - c))
     }
 
@@ -70,6 +85,8 @@ struct Mat3 {
 
     /// Rotation vector (axis * angle) of this rotation matrix (log map).
     var rotationVector: Vec3 {
+        // For a rotation matrix, trace = 1 + 2·cos(angle), and the skew-symmetric
+        // part (R − Rᵀ) holds 2·sin(angle)·axis.
         let trace = r0.x + r1.y + r2.z
         let cosA = max(-1.0, min(1.0, (trace - 1) / 2))
         let angle = acos(cosA)
@@ -81,5 +98,6 @@ struct Mat3 {
     }
 }
 
+// Unit conversions. The sensor reports gyro in deg/s; trig functions need radians.
 let degPerRad = 180.0 / Double.pi
 let radPerDeg = Double.pi / 180.0

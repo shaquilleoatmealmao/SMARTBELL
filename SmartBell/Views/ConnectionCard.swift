@@ -1,3 +1,11 @@
+//
+//  ConnectionCard.swift
+//  SmartBell — Views
+//
+//  Reusable card showing whether sensor data is flowing, the sample rate, and buttons
+//  to scan for the ESP32, connect to a found device, or start/stop the demo sensor.
+//
+
 import SwiftUI
 
 /// Connection status + the actions to get data flowing.
@@ -14,6 +22,7 @@ struct ConnectionCard: View {
                     Text("\(Int(model.live.sampleRate.rounded())) Hz").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
             }
+            // Action buttons only when there's something to fix (no data) or the demo is on.
             if !model.hasData || model.isDemo {
                 HStack {
                     if !model.isDemo {
@@ -27,6 +36,7 @@ struct ConnectionCard: View {
                     } label: { Label(model.isDemo ? "Stop demo" : "Try demo", systemImage: "play.circle") }
                     .buttonStyle(.bordered)
                 }
+                // One button per SmartBell found by the scan.
                 ForEach(model.ble.discovered, id: \.identifier) { p in
                     Button { model.ble.connect(p) } label: {
                         Label("Connect to \(p.name ?? "SmartBell")", systemImage: "link")
@@ -38,6 +48,7 @@ struct ConnectionCard: View {
         .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
     }
 
+    /// Status line; "connected but no data" usually means notifications haven't started.
     private var statusText: String {
         if model.isDemo { return "Demo sensor (simulated)" }
         if model.hasData { return model.ble.statusText }
